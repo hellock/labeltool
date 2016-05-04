@@ -125,6 +125,16 @@ class MainWindow(QMainWindow):
                 self.add_annotation()
                 if self.listwidget.count() % 5 == 0:
                     self.save_annotations_periodicly()
+        elif key == Qt.Key_Backspace:
+            if self.listwidget.hasFocus():
+                item = self.listwidget.currentItem()
+                self.listwidget.takeItem(self.listwidget.row(item))
+                self.listwidget.update()
+                info = item.text().split(': ')
+                word = info[0]
+                time_slot = list(map(int, info[1].split(' - ')))
+                print(time_slot)
+                self.annotation[word].remove(time_slot)
 
     def set_start(self, start):
         self.lineedit_start.setText(str(start))
@@ -173,10 +183,9 @@ class MainWindow(QMainWindow):
         self.video.signal_frame_updated.connect(self.on_frame_updated)
         self.video.next_frame()
         self.slider.setEnabled(True)
+        self.listwidget.clear()
         if os.path.isfile(self.filename + '.annotation'):
             self.load_annotation(self.filename + '.annotation')
-        else:
-            self.listwidget.clear()
 
     @pyqtSlot()
     def add_word(self):

@@ -21,6 +21,7 @@ class MainWindow(QMainWindow):
         self.init_ui()
         self.show()
         self.annotation = {}
+
         self.slider.sliderReleased.connect(self.on_slider_released)
 
     def init_ui(self):
@@ -97,10 +98,6 @@ class MainWindow(QMainWindow):
         screen_h = desktop.height()
         self.setGeometry((screen_w - w) / 2, (screen_h - h) / 2, w, h)
 
-    def eventFilter(self, event):
-        if event.type() == QEvent.KeyPress:
-            return False
-
     def keyPressEvent(self, event):
         key = event.key()
         if key == Qt.Key_D:
@@ -135,6 +132,16 @@ class MainWindow(QMainWindow):
     def set_end(self, end):
         self.lineedit_end.setText(str(end))
 
+    def load_annotation(self, filename):
+        with open(filename, 'r') as fin:
+            annotation = json.load(fin)
+        self.annotation = annotation
+        for word in annotation:
+            for time_slot in annotation[word]:
+                start = time_slot[0]
+                end = time_slot[1]
+                self.listwidget.addItem('{}: {} - {}'.format(word, start, end))
+
     def add_annotation(self):
         start = int(self.lineedit_start.text())
         end = int(self.lineedit_end.text())
@@ -166,6 +173,10 @@ class MainWindow(QMainWindow):
         self.video.signal_frame_updated.connect(self.on_frame_updated)
         self.video.next_frame()
         self.slider.setEnabled(True)
+        if os.path.isfile(self.filename + '.annotation'):
+            self.load_annotation(self.filename + '.annotation')
+        else:
+            self.listwidget.clear()
 
     @pyqtSlot()
     def add_word(self):

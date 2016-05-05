@@ -10,6 +10,7 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 
 from video import Video
+from subtitle import Subtitle
 
 
 class MainWindow(QMainWindow):
@@ -23,6 +24,7 @@ class MainWindow(QMainWindow):
         self.annotation = {}
 
         self.slider.sliderReleased.connect(self.on_slider_released)
+        self.listwidget.itemDoubleClicked.connect(self.on_item_double_clicked)
 
     def init_ui(self):
         self.setWindowTitle('LabelTool')
@@ -34,7 +36,11 @@ class MainWindow(QMainWindow):
         action_open = QAction('&Open', menubar)
         action_open.setShortcut('Ctrl+O')
         action_open.triggered.connect(self.open_file)
+        action_view = QAction('&View', menubar)
+        action_view.setShortcut('Ctrl+V')
+        action_view.triggered.connect(self.view_frames)
         menu_file.addAction(action_open)
+        menu_file.addAction(action_view)
 
         self.statusBar()
 
@@ -45,6 +51,10 @@ class MainWindow(QMainWindow):
         self.label_frame.setAlignment(Qt.AlignCenter)
         self.label_frame.setStyleSheet('border: 1px solid black')
 
+        self.label_subtitle = QLabel('subtitle', self.centralWidget())
+        self.label_subtitle.setAlignment(Qt.AlignCenter)
+        self.label_subtitle.setStyleSheet('border: 1px solid black')
+
         self.slider = QSlider(Qt.Horizontal, self.centralWidget())
         self.slider.setRange(0, 1000)
         self.slider.setTickInterval(1)
@@ -53,13 +63,15 @@ class MainWindow(QMainWindow):
 
         grid_layout = QGridLayout()
         grid_layout.setRowStretch(0, 1)
-        grid_layout.setRowStretch(1, 8)
+        grid_layout.setRowStretch(1, 10)
         grid_layout.setRowStretch(2, 2)
+        grid_layout.setRowStretch(3, 1)
         grid_layout.setColumnStretch(0, 6)
         grid_layout.setColumnStretch(1, 2)
         grid_layout.addWidget(self.label_filename, 0, 0, 1, 1)
         grid_layout.addWidget(self.label_frame, 1, 0, 1, 1)
-        grid_layout.addWidget(self.slider, 2, 0, 1, 2)
+        grid_layout.addWidget(self.label_subtitle, 2, 0, 1, 1)
+        grid_layout.addWidget(self.slider, 3, 0, 1, 2)
 
         self.label_start = QLabel('Start')
         self.label_end = QLabel('End')
@@ -83,7 +95,7 @@ class MainWindow(QMainWindow):
         layout_annotation.addWidget(self.combobox, 13, 0, 1, 1)
         layout_annotation.addWidget(self.lineedit_word, 13, 1, 1, 1)
 
-        grid_layout.addLayout(layout_annotation, 0, 1, 2, 1)
+        grid_layout.addLayout(layout_annotation, 0, 1, 3, 1)
 
         self.central_widget = QWidget(self)
         self.central_widget.setLayout(grid_layout)
@@ -178,7 +190,8 @@ class MainWindow(QMainWindow):
             return
         disp_name = os.path.basename(self.filename)
         self.label_filename.setText(os.path.basename(disp_name))
-        self.video = Video(self.filename)
+        self.video = Video(self.filename, 500)
+        self.subtitle = Subtitle(os.path.splitext(self.filename)[0] + '.srt')
         self.signal_play_option.connect(self.video.play_ctl)
         self.video.signal_frame_updated.connect(self.on_frame_updated)
         self.video.next_frame()
@@ -186,6 +199,11 @@ class MainWindow(QMainWindow):
         self.listwidget.clear()
         if os.path.isfile(self.filename + '.annotation'):
             self.load_annotation(self.filename + '.annotation')
+
+    @pyqtSlot()
+    def view_frames(self):
+        # view_window = ViewWindow(self.annotation, self.video)
+        pass
 
     @pyqtSlot()
     def add_word(self):
@@ -205,6 +223,7 @@ class MainWindow(QMainWindow):
                               self.label_frame.height() - 2,
                               Qt.KeepAspectRatio))
             self.label_frame.update()
+            self.label_subtitle.setText(self.subtitle.get_subtitle(float(self.video.frame_cursor) / self.video.fps))
             self.statusBar().showMessage(' Frame {}/{}'.format(
                 frame_cursor, frame_num))
             self.slider.setValue(int(frame_cursor * self.slider.maximum() / frame_num))
@@ -214,6 +233,31 @@ class MainWindow(QMainWindow):
         self.video.play_status = 0
         cursor = int(self.video.frame_num * self.slider.value() / self.slider.maximum())
         self.video.set_pos(cursor)
+
+    @pyqtSlot(QListWidgetItem)
+    def on_item_double_clicked(self, item):
+        cursor = int(item.text().split(': ')[1].split(' - ')[0])
+        self.video.set_pos(cursor)
+
+
+class ViewWindow(QWidget):
+
+    def __init__(self, annotation, video):
+        QWidget.__init__(self)
+        self.annotation = annotation
+        self.video = video
+        self.grid_layout = QGridLayout()
+        self.grid_layout.setHorizontalSpacing(4)
+        for i in range(self.grid_layout.horizontalSpacing()):
+            frame_layout = QGridLayout()
+            frame_layout.setRowStretch(0, 6)
+            frame_layout.setRowStretch(1, 1)
+            frame_layout.addWidget(QLabel(), 0, 0, 1, 1)
+            frame_layout.addWidget(QLabel(), 1, 0, 1, 1)
+            self.grid_layout.addLayout(frame_layout, 0, i, 1, 1)
+        self.setLayout(self.grid_layout)
+        self.show()
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

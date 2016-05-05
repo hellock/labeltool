@@ -10,13 +10,13 @@ class Video(QObject):
 
     signal_frame_updated = pyqtSignal(bool, QPixmap, name='frameUpdated')
 
-    def __init__(self, filepath):
+    def __init__(self, filepath, max_buf_size):
         super(Video, self).__init__()
         self.filepath = filepath
         self.cap = cv2.VideoCapture(filepath)
         self.frame_buf = {}
         self.frame_buf_order = []
-        self.max_buf_size = 100
+        self.max_buf_size = max_buf_size
         self.frame_cursor = -1
         self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))

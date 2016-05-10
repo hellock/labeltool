@@ -8,21 +8,29 @@ from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 
 class Video(QObject):
 
-    signal_frame_updated = pyqtSignal(bool, QPixmap, name='frameUpdated')
+    signal_frame_updated = pyqtSignal(QPixmap, name='frameUpdated')
 
-    def __init__(self, filepath, max_buf_size):
+    def __init__(self, filepath=None, max_buf_size=500):
         super(Video, self).__init__()
         self.filepath = filepath
-        self.cap = cv2.VideoCapture(filepath)
         self.frame_buf = {}
         self.frame_buf_order = []
         self.max_buf_size = max_buf_size
         self.frame_cursor = -1
+        self.play_status = 0
+        if filepath is not None:
+            self.cap = cv2.VideoCapture(filepath)
+            self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            self.fps = int(round(self.cap.get(cv2.CAP_PROP_FPS)))
+            self.frame_num = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    def load(self, filepath):
+        self.cap = cv2.VideoCapture(filepath)
         self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fps = int(round(self.cap.get(cv2.CAP_PROP_FPS)))
         self.frame_num = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.play_status = 0
 
     def mat2qpixmap(self, img):
         tmp_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -54,11 +62,10 @@ class Video(QObject):
             # tmp = time.time()
             # read_time = tmp - start
             if ret == 0:
-                self.signal_frame_updated.emit(False, QPixmap())
                 return
             else:
                 self.add2buf(self.frame_cursor, img)
-        self.signal_frame_updated.emit(True, self.mat2qpixmap(img))
+        self.signal_frame_updated.emit(self.mat2qpixmap(img))
 
     def last_frame(self):
         if self.frame_cursor > 0:
@@ -69,11 +76,10 @@ class Video(QObject):
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.frame_cursor)
             ret, img = self.cap.read()
             if ret == 0:
-                self.signal_frame_updated.emit(False, QPixmap())
                 return
             else:
                 self.add2buf(self.frame_cursor, img)
-        self.signal_frame_updated.emit(True, self.mat2qpixmap(img))
+        self.signal_frame_updated.emit(self.mat2qpixmap(img))
 
     def set_pos(self, cursor):
         self.frame_cursor = cursor
@@ -83,11 +89,10 @@ class Video(QObject):
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.frame_cursor)
             ret, img = self.cap.read()
             if ret == 0:
-                self.signal_frame_updated.emit(False, QPixmap())
                 return
             else:
                 self.add2buf(self.frame_cursor, img)
-        self.signal_frame_updated.emit(True, self.mat2qpixmap(img))
+        self.signal_frame_updated.emit(self.mat2qpixmap(img))
 
     def play_forward(self):
         while self.play_status == 1 and self.frame_cursor < self.frame_num - 1:

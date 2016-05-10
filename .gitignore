@@ -1,3 +1,4 @@
 .DS_Store
+*.jpg
 __pycache__/
 data/

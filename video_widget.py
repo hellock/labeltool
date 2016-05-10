@@ -9,6 +9,8 @@ from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 
+from image_label import ImageLabel
+
 
 class VideoStatus(Enum):
     not_loaded = -1
@@ -156,7 +158,7 @@ class Video(QObject):
             t = max(int(rect.top()), 0)
             r = min(int(rect.right()), self.frame_width)
             b = min(int(rect.bottom()), self.frame_height)
-            rects.append([l, t, r, b])
+            rects.append(QRect(l, t, r - l, b - t))
         self.signal_tracking_updated.emit(rects)
 
     @pyqtSlot(list)
@@ -166,109 +168,10 @@ class Video(QObject):
             tracker = dlib.correlation_tracker()
             tracker.start_track(
                 self.frame_buf[self.frame_cursor],
-                dlib.rectangle(rect[0], rect[1], rect[2], rect[3]))
+                dlib.rectangle(rect.left(), rect.top(),
+                               rect.right(), rect.bottom())
+            )
             self.trackers.append(tracker)
-
-
-class ImageFrame(QLabel):
-    signal_rect_changed = pyqtSignal(list)
-
-    def __init__(self, *args):
-        self.cursor_pos = None
-        self.mouse_down = False
-        self.show_reticle = False
-        self.rects = []
-        super(ImageFrame, self).__init__(*args)
-        self.setMouseTracking(True)
-        self.installEventFilter(self)
-
-    def clear_rects(self):
-        self.rects = []
-
-    def pt2rect(self, pt1, pt2):
-        left = min(pt1.x(), pt2.x())
-        top = min(pt1.y(), pt2.y())
-        right = max(pt1.x(), pt2.x())
-        bottom = max(pt1.y(), pt2.y())
-        return [left, top, right, bottom]
-
-    def scale_rect(self, rect, scale_ratio):
-        new_rect = list(map(int, [rect[0] * scale_ratio,
-                                  rect[1] * scale_ratio,
-                                  rect[2] * scale_ratio,
-                                  rect[3] * scale_ratio]))
-        return new_rect
-
-    def paintEvent(self, event):
-        super(ImageFrame, self).paintEvent(event)
-        painter = QPainter()
-        painter.begin(self)
-        painter.setPen(QPen(Qt.red, 2, Qt.SolidLine))
-        for rect in self.rects:
-            painter.drawRect(rect[0], rect[1], rect[2] - rect[0],
-                             rect[3] - rect[1])
-        if not self.mouse_down:
-            pos = self.cursor_pos
-            if pos is not None and self.show_reticle:
-                painter.drawLine(0, pos.y(), self.width(), pos.y())
-                painter.drawLine(pos.x(), 0, pos.x(), self.height())
-        else:
-            x = min(self.start_pt.x(), self.cursor_pos.x())
-            y = min(self.start_pt.y(), self.cursor_pos.y())
-            w = abs(self.start_pt.x() - self.cursor_pos.x())
-            h = abs(self.start_pt.y() - self.cursor_pos.y())
-            painter.drawRect(x, y, w, h)
-        painter.end()
-
-    def mousePressEvent(self, event):
-        if event.buttons() == Qt.LeftButton:
-            self.start_pt = event.pos()
-            self.mouse_down = True
-
-    def mouseReleaseEvent(self, event):
-        self.cursor_pos = event.pos()
-        self.mouse_down = False
-        self.show_reticle = False
-        if event.button() == Qt.LeftButton:
-            self.rects.append(self.pt2rect(self.start_pt, self.cursor_pos))
-        elif event.button() == Qt.RightButton and len(self.rects) > 0:
-            self.rects.pop()
-            self.update()
-        origin_size_rects = []
-        for rect in self.rects:
-            origin_size_rects.append(self.scale_rect(rect, self.scale_ratio))
-        self.signal_rect_changed.emit(origin_size_rects)
-
-    def mouseMoveEvent(self, event):
-        self.cursor_pos = event.pos()
-        if self.show_reticle or self.mouse_down:
-            self.update()
-
-    def eventFilter(self, object, event):
-        if event.type() == QEvent.KeyPress:
-            print(event.key())
-            if event.key() == Qt.Key_Control:
-                self.show_reticle = not self.show_reticle
-                return True
-        return False
-
-    def show_img(self, pixmap):
-        self.scale_ratio = pixmap.width() / float(self.width())
-        scaled_pixmap = pixmap.scaled(self.width() - 2, self.height() - 2,
-                                      Qt.KeepAspectRatio)
-        l = (self.width() - scaled_pixmap.width()) / 2
-        r = self.width() - l
-        t = (self.height() - scaled_pixmap.height()) / 2
-        b = self.height() - t
-        self.frame_region = [l, t, r, b]
-        self.setPixmap(scaled_pixmap)
-        self.update()
-
-    @pyqtSlot(list)
-    def update_rects(self, rects):
-        self.rects = []
-        for rect in rects:
-            self.rects.append(self.scale_rect(rect, 1 / self.scale_ratio))
 
 
 class VideoWidget(QWidget):
@@ -315,7 +218,7 @@ class VideoWidget(QWidget):
         self.grid_layout.addWidget(self.label_filename, row_pos, 0)
 
     def set_label_frame(self, row_pos):
-        self.label_frame = ImageFrame('video')
+        self.label_frame = ImageLabel('video')
         self.label_frame.setAlignment(Qt.AlignCenter)
         self.label_frame.setStyleSheet('border: 1px solid black')
         self.grid_layout.addWidget(self.label_frame, row_pos, 0)

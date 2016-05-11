@@ -161,17 +161,18 @@ class Video(QObject):
             rects.append(QRect(l, t, r - l, b - t))
         self.signal_tracking_updated.emit(rects)
 
-    @pyqtSlot(list)
-    def set_trackers(self, rects):
-        self.trackers = []
-        for rect in rects:
-            tracker = dlib.correlation_tracker()
-            tracker.start_track(
-                self.frame_buf[self.frame_cursor],
-                dlib.rectangle(rect.left(), rect.top(),
-                               rect.right(), rect.bottom())
-            )
-            self.trackers.append(tracker)
+    @pyqtSlot(QRect)
+    def add_tracker(self, rect):
+        tracker = dlib.correlation_tracker()
+        tracker.start_track(
+            self.frame_buf[self.frame_cursor],
+            dlib.rectangle(rect.left(), rect.top(), rect.right(), rect.bottom())
+        )
+        self.trackers.append(tracker)
+
+    @pyqtSlot()
+    def del_tracker(self):
+        self.trackers.pop()
 
 
 class VideoWidget(QWidget):
@@ -190,7 +191,8 @@ class VideoWidget(QWidget):
         if self.with_slider:
             self.slider.sliderReleased.connect(self.on_slider_released)
         self.video.signal_tracking_updated.connect(self.label_frame.update_rects)
-        self.label_frame.signal_rect_changed.connect(self.video.set_trackers)
+        self.label_frame.signal_rect_added.connect(self.video.add_tracker)
+        self.label_frame.signal_rect_deleted.connect(self.video.del_tracker)
 
     def init_ui(self):
         self.grid_layout = QGridLayout()

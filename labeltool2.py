@@ -4,6 +4,7 @@ import sys
 
 from PyQt5.QtWidgets import QMainWindow
 from video_widget import *
+from annotation_widget import *
 
 
 class MainWindow(QMainWindow):
@@ -14,6 +15,8 @@ class MainWindow(QMainWindow):
         self.show()
         self.action_open.triggered.connect(self.video_widget.open_file)
         self.video_widget.signal_frame_updated.connect(self.update_statusbar)
+        self.annotation_widget.combobox_word.currentTextChanged.connect(
+            self.video_widget.label_frame.update_bbox_label)
 
     def center_window(self, w, h):
         desktop = QDesktopWidget()
@@ -31,16 +34,13 @@ class MainWindow(QMainWindow):
         grid_layout.setColumnStretch(0, 6)
         grid_layout.setColumnStretch(1, 2)
         self.video_widget = VideoWidget()
-        # self.annotation_widget = AnnotationWidget()
+        self.annotation_widget = AnnotationWidget()
         grid_layout.addWidget(self.video_widget, 0, 0)
-        # grid_layout.addWidget(self.annotation_widget, 0, 1)
+        grid_layout.addWidget(self.annotation_widget, 0, 1)
 
         self.central_widget = QWidget(self)
         self.central_widget.setLayout(grid_layout)
         self.setCentralWidget(self.central_widget)
-
-        # self.setFocusPolicy(Qt.StrongFocus)
-        # self.setFocus()
 
     def set_menubar(self):
         menubar = self.menuBar()

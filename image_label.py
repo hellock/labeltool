@@ -4,7 +4,8 @@ from PyQt5.QtWidgets import *
 
 
 class ImageLabel(QLabel):
-    signal_rect_changed = pyqtSignal(list)
+    signal_rect_added = pyqtSignal(QRect)
+    signal_rect_deleted = pyqtSignal()
 
     def __init__(self, *args):
         self.start_pt = None
@@ -13,6 +14,8 @@ class ImageLabel(QLabel):
         self.mouse_down = False
         self.show_reticle = False
         self.rects = []
+        self.bbox_labels = []
+        self.bbox_label = None
         super(ImageLabel, self).__init__(*args)
         self.setMouseTracking(True)
         self.installEventFilter(self)
@@ -34,13 +37,19 @@ class ImageLabel(QLabel):
         new_h = int(rect.height() * scale_ratio)
         return QRect(new_x, new_y, new_w, new_h)
 
+    def proj_rect_to_image(self, rect):
+        roi_rect = self.img_region.intersected(rect).translated(
+            -self.img_region.topLeft())
+        return self.scale_rect(roi_rect, self.scale_ratio)
+
     def paintEvent(self, event):
         super(ImageLabel, self).paintEvent(event)
         painter = QPainter()
         painter.begin(self)
         painter.setPen(QPen(Qt.red, 2, Qt.SolidLine))
-        for rect in self.rects:
-            painter.drawRect(rect)
+        for i in range(len(self.rects)):
+            painter.drawRect(self.rects[i])
+            painter.drawText(QPoint(self.rects[i].x(), self.rects[i].y() - 3), self.bbox_labels[i])
         if not self.mouse_down:
             pos = self.cursor_pos
             if pos is not None and self.show_reticle:
@@ -62,17 +71,16 @@ class ImageLabel(QLabel):
         self.show_reticle = False
         if event.button() == Qt.LeftButton:
             self.end_pt = event.pos()
-            self.rects.append(self.pt2rect(self.start_pt, self.end_pt))
+            rect = self.pt2rect(self.start_pt, self.end_pt)
+            self.rects.append(rect)
+            self.bbox_labels.append(self.bbox_label)
+            self.signal_rect_added.emit(self.proj_rect_to_image(rect))
             self.update()
         elif event.button() == Qt.RightButton and len(self.rects) > 0:
             self.rects.pop()
+            self.bbox_labels.pop()
+            self.signal_rect_deleted.emit()
             self.update()
-        origin_size_rects = []
-        for rect in self.rects:
-            roi_rect = self.img_region.intersected(rect).translated(
-                -self.img_region.topLeft())
-            origin_size_rects.append(self.scale_rect(roi_rect, self.scale_ratio))
-        self.signal_rect_changed.emit(origin_size_rects)
 
     def mouseMoveEvent(self, event):
         self.cursor_pos = event.pos()
@@ -105,3 +113,7 @@ class ImageLabel(QLabel):
             show_rect = self.scale_rect(rect, 1 / self.scale_ratio).translated(
                 self.img_region.topLeft())
             self.rects.append(show_rect)
+
+    @pyqtSlot(str)
+    def update_bbox_label(self, label):
+        self.bbox_label = label

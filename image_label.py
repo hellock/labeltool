@@ -18,6 +18,7 @@ class ImageLabel(QLabel):
         self.bbox_label = None
         super(ImageLabel, self).__init__(*args)
         self.setMouseTracking(True)
+        self.setFocusPolicy(Qt.StrongFocus)
         self.installEventFilter(self)
 
     def set_rects(self, rects):
@@ -71,11 +72,12 @@ class ImageLabel(QLabel):
         self.mouse_down = False
         self.show_reticle = False
         if event.button() == Qt.LeftButton:
-            self.end_pt = event.pos()
-            rect = self.pt2rect(self.start_pt, self.end_pt)
-            self.rects.append(rect)
-            self.bbox_labels.append(self.bbox_label)
-            self.signal_rect_added.emit(self.proj_rect_to_image(rect))
+            if self.bbox_label is not None:
+                self.end_pt = event.pos()
+                rect = self.pt2rect(self.start_pt, self.end_pt)
+                self.rects.append(rect)
+                self.bbox_labels.append(self.bbox_label)
+                self.signal_rect_added.emit(self.proj_rect_to_image(rect))
             self.update()
         elif event.button() == Qt.RightButton:
             for i in range(len(self.rects)):
@@ -92,9 +94,9 @@ class ImageLabel(QLabel):
 
     def eventFilter(self, object, event):
         if event.type() == QEvent.KeyPress:
-            print(event.key())
             if event.key() == Qt.Key_Control:
                 self.show_reticle = not self.show_reticle
+                self.update()
                 return True
         return False
 

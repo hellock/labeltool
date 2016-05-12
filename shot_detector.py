@@ -1,9 +1,11 @@
+#!/usr/bin/env python3
+
 import os
 import json
 import subprocess
 
 
-class ShotDetectot(object):
+class ShotDetector(object):
 
     def __init__(self, thr=0.15):
         self.thr = thr
@@ -15,27 +17,39 @@ class ShotDetectot(object):
             cap = cv2.VideoCapture(filename)
             fps = int(round(cap.get(cv2.CAP_PROP_FPS)))
             frame_num = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        shot_file = filename + '.shot'
-        if os.path.isfile(shot_file):
-            with open(shot_file, 'r') as fin:
-                boundaries = json.load(fin)
-            return boundaries
+        annotation_file = filename + '.annotation'
+        if os.path.isfile(annotation_file):
+            with open(annotation_file, 'r') as fin:
+                annotation = json.load(fin)
+            return annotation['shots']
         scene_ps = subprocess.Popen(
             ('ffprobe', '-show_frames', '-of', 'compact=p=0', '-f', 'lavfi',
              'movie={},select=gt(scene\,{})'.format(filename, self.thr)),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT)
         output = scene_ps.stdout.read().decode('utf-8')
-        boundaries = []
+        shots = []
         for line in output.split('\n')[15: -1]:
             boundary = int(round(float(line.split('|')[4].split('=')[-1]) * fps))
-            if len(boundaries) == 0:
-                boundaries.append((0, boundary))
+            if len(shots) == 0:
+                shots.append((0, boundary - 1))
             else:
-                start = boundaries[-1][1]
-                boundaries.append((start, boundary))
-        boundaries.append((boundaries[-1][1], frame_num))
+                start = shots[-1][1] + 1
+                shots.append((start, boundary - 1))
+        shots.append((shots[-1][1] + 1, frame_num - 1))
         if save:
-            with open(shot_file, 'w') as fout:
-                json.dump(boundaries, fout)
-        return boundaries
+            annotation = dict(shots=shots)
+            with open(annotation_file, 'w') as fout:
+                json.dump(annotation, fout)
+        return shots
+
+if __name__ == '__main__':
+    shot_detector = ShotDetector()
+    video_dir = '/home/kchen/data/youtube/selected/'
+    for entry in os.scandir(video_dir):
+        if not entry.is_file():
+            continue
+        filename = entry.name
+        if filename.split('.')[-1] in ['mp4', 'mkv']:
+            print(filename)
+            shot_detector.detect(video_dir + filename)

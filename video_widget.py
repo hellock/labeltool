@@ -37,6 +37,7 @@ class Video(QObject):
         self.max_buf_size = max_buf_size
         self.max_fps = max_fps
         self.frame_cursor = -1
+        self.section = None
         self.status = VideoStatus.not_loaded
         if filepath is not None:
             self.load(filepath)
@@ -47,6 +48,7 @@ class Video(QObject):
         self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fps = int(round(self.cap.get(cv2.CAP_PROP_FPS)))
         self.frame_num = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.section = [0, self.frame_num - 1]
         self.status = VideoStatus.pause
 
     def mat2qpixmap(self, img):
@@ -69,7 +71,7 @@ class Video(QObject):
         self.frame_buf_order.append(cursor)
 
     def frame_forward(self):
-        if self.frame_cursor < self.frame_num - 1:
+        if self.frame_cursor < self.section[1]:
             self.frame_cursor += 1
             if self.status != VideoStatus.play_forward:
                 self.status = VideoStatus.frame_forward
@@ -85,7 +87,7 @@ class Video(QObject):
         self.signal_frame_updated.emit(self.mat2qpixmap(img))
 
     def frame_backward(self):
-        if self.frame_cursor > 0:
+        if self.frame_cursor > self.section[0]:
             self.frame_cursor -= 1
             if self.status != VideoStatus.play_backward:
                 self.status = VideoStatus.frame_backward
@@ -98,11 +100,12 @@ class Video(QObject):
                 return
             else:
                 self.add2buf(self.frame_cursor, img)
-        # self.track(img)
         self.signal_frame_updated.emit(self.mat2qpixmap(img))
 
     def jump_to_frame(self, cursor):
         self.status = VideoStatus.pause
+        if cursor < 0 or cursor >= self.frame_num:
+            return
         self.frame_cursor = cursor
         if self.frame_cursor in self.frame_buf:
             img = self.frame_buf[self.frame_cursor]
@@ -260,15 +263,25 @@ class VideoWidget(QWidget):
             elif key == Qt.Key_Space:
                 self.video.play_ctrl(VideoStatus.pause)
                 return True
-            elif key == Qt.Key_Alt:
-                self.label_frame.show_reticle = not self.label_frame.show_reticle
-                self.label_frame.update()
+        elif event.type() == QEvent.Wheel:
+            delta = event.angleDelta().y()
+            if delta > 0:
+                if self.section_idx < len(self.shots) - 1:
+                    self.section_idx += 1
+                    self.video.section = self.shots[self.section_idx]
+                    self.video.play_ctrl(VideoStatus.frame_forward)
+            else:
+                if self.section_idx > 0:
+                    self.section_idx -= 1
+                    self.video.section = self.shots[self.section_idx]
+                    self.video.play_ctrl(VideoStatus.frame_backward)
         return False
 
     @pyqtSlot()
     def open_file(self):
         self.filename, _ = QFileDialog.getOpenFileName(
-            self, 'Load video', './', 'Videos (*.mp4 *.avi *.mkv *.flv *.m4v)')
+            self, 'Load video', '/home/kchen/data/youtube/selected/',
+            'Videos (*.mp4 *.avi *.mkv *.flv *.m4v)')
         if not self.filename:
             return
         if self.with_filename:
@@ -278,6 +291,8 @@ class VideoWidget(QWidget):
         self.video.load(self.filename)
         if os.path.isfile(self.filename + '.annotation'):
             self.annotation.load(self.filename + '.annotation')
+            self.shots = self.annotation.data['shots']
+            self.shot_idx = 0
         self.video.frame_forward()
         self.signal_video_loaded.emit(self.filename)
 
@@ -300,3 +315,9 @@ class VideoWidget(QWidget):
     @pyqtSlot(int)
     def jump_to_frame(self, cursor):
         self.video.jump_to_frame(cursor)
+
+    @pyqtSlot(int)
+    def jump_to_section(self, section_idx):
+        self.section_idx = section_idx
+        self.video.section = self.shots[section_idx]
+        self.video.jump_to_frame(self.shots[self.section_idx][0])

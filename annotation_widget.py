@@ -32,7 +32,7 @@ class Annotation(object):
 
 
 class AnnotationWidget(QWidget):
-    signal_frame_selected = pyqtSignal(int)
+    signal_section_selected = pyqtSignal(int)
 
     def __init__(self):
         super(AnnotationWidget, self).__init__()
@@ -55,14 +55,14 @@ class AnnotationWidget(QWidget):
         self.vbox_layout.addLayout(self.hbox_layout, 1)
         self.setLayout(self.vbox_layout)
 
-    def keyPressEvent(self, event):
-        if event.type() != QEvent.KeyPress:
-            return
-        key = event.key()
-        if key == Qt.Key_Backspace:
-            items = self.list_widget.selectedItems()
-            for item in items:
-                self.del_annotation_item(item)
+    # def keyPressEvent(self, event):
+    #     if event.type() != QEvent.KeyPress:
+    #         return
+    #     key = event.key()
+    #     if key == Qt.Key_Backspace:
+    #         items = self.list_widget.selectedItems()
+    #         for item in items:
+    #             self.del_annotation_item(item)
 
     def add_annotation(self, word, start, end):
         if word not in self.annotation:
@@ -99,19 +99,13 @@ class AnnotationWidget(QWidget):
 
     @pyqtSlot(str)
     def load_annotation(self, filename):
-        self.list_widget.clear()
-        annotation_filename = filename + '.annotation'
-        if not os.path.isfile(annotation_filename):
-            return
-        with open(annotation_filename, 'r') as fin:
-            self.annotation = json.load(fin)
-        for word in self.annotation:
-            for time_slot in self.annotation[word]:
-                start = time_slot[0]
-                end = time_slot[1]
-                self.list_widget.addItem('{}: {} - {}'.format(word, start, end))
+        self.annotation.load(filename + '.annotation')
+        for shot in self.annotation.data['shots']:
+            self.list_widget.addItem('{shot[0]} - {shot[1]}'.format(shot=shot))
+        self.list_widget.update()
 
     @pyqtSlot(QListWidgetItem)
     def on_item_double_clicked(self, item):
-        cursor = int(item.text().split(': ')[1].split(' - ')[0])
-        self.signal_frame_selected.emit(cursor)
+        section_idx = self.list_widget.row(item)
+        # cursor = int(item.text().split(' - ')[0])
+        self.signal_section_selected.emit(section_idx)

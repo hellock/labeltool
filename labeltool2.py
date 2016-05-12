@@ -14,7 +14,9 @@ class MainWindow(QMainWindow):
         self.init_ui()
         self.show()
         self.action_open.triggered.connect(self.video_widget.open_file)
+        self.video_widget.signal_video_loaded.connect(self.annotation_widget.load_annotation)
         self.video_widget.signal_frame_updated.connect(self.update_statusbar)
+        self.annotation_widget.signal_section_selected.connect(self.video_widget.jump_to_section)
         self.annotation_widget.combobox_word.currentTextChanged.connect(
             self.video_widget.label_frame.update_bbox_label)
 

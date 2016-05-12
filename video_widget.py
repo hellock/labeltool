@@ -10,6 +10,7 @@ from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 
 from image_label import ImageLabel
+from annotation_widget import Annotation
 
 
 class VideoStatus(Enum):
@@ -97,7 +98,7 @@ class Video(QObject):
                 return
             else:
                 self.add2buf(self.frame_cursor, img)
-        self.track(img)
+        # self.track(img)
         self.signal_frame_updated.emit(self.mat2qpixmap(img))
 
     def jump_to_frame(self, cursor):
@@ -170,9 +171,9 @@ class Video(QObject):
         )
         self.trackers.append(tracker)
 
-    @pyqtSlot()
-    def del_tracker(self):
-        self.trackers.pop()
+    @pyqtSlot(int)
+    def del_tracker(self, idx):
+        self.trackers.pop(idx)
 
 
 class VideoWidget(QWidget):
@@ -186,10 +187,12 @@ class VideoWidget(QWidget):
         self.with_filename = with_filename
         self.with_slider = with_slider
         self.video = Video(max_buf_size=max_buf_size, max_fps=max_fps)
+        self.annotation = Annotation()
         self.init_ui()
         self.installEventFilter(self)
         if self.with_slider:
             self.slider.sliderReleased.connect(self.on_slider_released)
+        self.video.signal_frame_updated.connect(self.update_frame)
         self.video.signal_tracking_updated.connect(self.label_frame.update_rects)
         self.label_frame.signal_rect_added.connect(self.video.add_tracker)
         self.label_frame.signal_rect_deleted.connect(self.video.del_tracker)
@@ -273,7 +276,8 @@ class VideoWidget(QWidget):
         if self.with_slider:
             self.slider.setEnabled(True)
         self.video.load(self.filename)
-        self.video.signal_frame_updated.connect(self.update_frame)
+        if os.path.isfile(self.filename + '.annotation'):
+            self.annotation.load(self.filename + '.annotation')
         self.video.frame_forward()
         self.signal_video_loaded.emit(self.filename)
 

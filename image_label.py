@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import *
 
 class ImageLabel(QLabel):
     signal_rect_added = pyqtSignal(QRect)
-    signal_rect_deleted = pyqtSignal()
+    signal_rect_deleted = pyqtSignal(int)
 
     def __init__(self, *args):
         self.start_pt = None
@@ -20,8 +20,8 @@ class ImageLabel(QLabel):
         self.setMouseTracking(True)
         self.installEventFilter(self)
 
-    def clear_rects(self):
-        self.rects = []
+    def set_rects(self, rects):
+        self.rects = rects
 
     def pt2rect(self, pt1, pt2):
         left = min(pt1.x(), pt2.x())
@@ -48,8 +48,9 @@ class ImageLabel(QLabel):
         painter.begin(self)
         painter.setPen(QPen(Qt.red, 2, Qt.SolidLine))
         for i in range(len(self.rects)):
-            painter.drawRect(self.rects[i])
-            painter.drawText(QPoint(self.rects[i].x(), self.rects[i].y() - 3), self.bbox_labels[i])
+            rect = self.rects[i]
+            painter.drawRect(rect)
+            painter.drawText(QPoint(rect.x(), rect.y() - 3), self.bbox_labels[i])
         if not self.mouse_down:
             pos = self.cursor_pos
             if pos is not None and self.show_reticle:
@@ -76,11 +77,13 @@ class ImageLabel(QLabel):
             self.bbox_labels.append(self.bbox_label)
             self.signal_rect_added.emit(self.proj_rect_to_image(rect))
             self.update()
-        elif event.button() == Qt.RightButton and len(self.rects) > 0:
-            self.rects.pop()
-            self.bbox_labels.pop()
-            self.signal_rect_deleted.emit()
-            self.update()
+        elif event.button() == Qt.RightButton:
+            for i in range(len(self.rects)):
+                if self.rects[i].contains(event.pos()):
+                    self.rects.pop(i)
+                    self.bbox_labels.pop(i)
+                    self.signal_rect_deleted.emit(i)
+                    self.update()
 
     def mouseMoveEvent(self, event):
         self.cursor_pos = event.pos()

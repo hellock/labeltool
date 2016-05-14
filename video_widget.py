@@ -4,13 +4,13 @@ import threading
 from enum import Enum
 
 import cv2
-import dlib
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 
+from bbox import BoundingBox
 from image_label import ImageLabel
-from annotation_widget import Annotation
+from tracker import Tracker
 
 
 class VideoStatus(Enum):
@@ -24,21 +24,23 @@ class VideoStatus(Enum):
 
 class Video(QObject):
 
-    signal_frame_updated = pyqtSignal(QPixmap, name='frameUpdated')
-    signal_tracking_updated = pyqtSignal(list)
+    signal_frame_updated = pyqtSignal(QPixmap)
+    signal_bboxes_updated = pyqtSignal(int, list)
+    signal_bbox_added = pyqtSignal(int, BoundingBox)
+    signal_bbox_deleted = pyqtSignal(int, int)
 
     def __init__(self, filepath=None, max_buf_size=500, max_fps=50.0):
         super(Video, self).__init__()
         self.cap = cv2.VideoCapture()
+        self.section = None
         self.trackers = []
-        self.filepath = filepath
+        self.frame_cursor = -1
         self.frame_buf = {}
         self.frame_buf_order = []
         self.max_buf_size = max_buf_size
         self.max_fps = max_fps
-        self.frame_cursor = -1
-        self.section = None
         self.status = VideoStatus.not_loaded
+        self.filepath = filepath
         if filepath is not None:
             self.load(filepath)
 
@@ -55,9 +57,9 @@ class Video(QObject):
         tmp_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         height, width, depth = tmp_img.shape
         bytes_per_line = depth * width
-        qt_img = QImage(tmp_img.data, width, height, bytes_per_line,
+        qimg = QImage(tmp_img.data, width, height, bytes_per_line,
                         QImage.Format_RGB888)
-        pixmap = QPixmap.fromImage(qt_img)
+        pixmap = QPixmap.fromImage(qimg)
         return pixmap
 
     def add2buf(self, cursor, img):
@@ -116,12 +118,13 @@ class Video(QObject):
                 return
             else:
                 self.add2buf(self.frame_cursor, img)
+        self.clear_trackers()
         self.signal_frame_updated.emit(self.mat2qpixmap(img))
 
     def play_forward(self):
         min_interval = 1 / self.max_fps
         while (self.status == VideoStatus.play_forward and
-               self.frame_cursor < self.frame_num - 1):
+               self.frame_cursor < self.section[1]):
             start = time.time()
             self.frame_forward()
             ellapsed = time.time() - start
@@ -131,7 +134,7 @@ class Video(QObject):
     def play_backward(self):
         min_interval = 1 / self.max_fps
         while (self.status == VideoStatus.play_backward and
-               self.frame_cursor > 0):
+               self.frame_cursor > self.section[0]):
             start = time.time()
             self.frame_backward()
             ellapsed = time.time() - start
@@ -154,35 +157,34 @@ class Video(QObject):
             self.frame_backward()
 
     def track(self, img):
-        rects = []
+        bboxes = []
         for tracker in self.trackers:
-            tracker.update(img)
-            rect = tracker.get_position()
-            l = max(int(rect.left()), 0)
-            t = max(int(rect.top()), 0)
-            r = min(int(rect.right()), self.frame_width)
-            b = min(int(rect.bottom()), self.frame_height)
-            rects.append(QRect(l, t, r - l, b - t))
-        self.signal_tracking_updated.emit(rects)
+            bbox = tracker.update(img)
+            bbox = bbox.intersected(QRect(0, 0, self.frame_width, self.frame_height))
+            bboxes.append(bbox)
+        self.signal_bboxes_updated.emit(self.frame_cursor, bboxes)
 
-    @pyqtSlot(QRect)
-    def add_tracker(self, rect):
-        tracker = dlib.correlation_tracker()
-        tracker.start_track(
-            self.frame_buf[self.frame_cursor],
-            dlib.rectangle(rect.left(), rect.top(), rect.right(), rect.bottom())
-        )
+    def clear_trackers(self):
+        self.trackers = []
+
+    @pyqtSlot(BoundingBox)
+    def add_tracker(self, bbox):
+        tracker = Tracker()
+        tracker.start_track(self.frame_buf[self.frame_cursor], bbox)
         self.trackers.append(tracker)
+        self.signal_bbox_added.emit(self.frame_cursor, bbox)
 
     @pyqtSlot(int)
     def del_tracker(self, idx):
         self.trackers.pop(idx)
+        self.signal_bbox_deleted.emit(self.frame_cursor, idx)
 
 
 class VideoWidget(QWidget):
     signal_play_ctrl = pyqtSignal(VideoStatus)
     signal_video_loaded = pyqtSignal(str)
     signal_frame_updated = pyqtSignal(int)
+    signal_section_changed = pyqtSignal(int)
 
     def __init__(self, parent=None, with_filename=True, with_slider=True,
                  max_buf_size=500, max_fps=50.0):
@@ -190,15 +192,15 @@ class VideoWidget(QWidget):
         self.with_filename = with_filename
         self.with_slider = with_slider
         self.video = Video(max_buf_size=max_buf_size, max_fps=max_fps)
-        self.annotation = Annotation()
+        self.shots = []
         self.init_ui()
         self.installEventFilter(self)
         if self.with_slider:
             self.slider.sliderReleased.connect(self.on_slider_released)
         self.video.signal_frame_updated.connect(self.update_frame)
-        self.video.signal_tracking_updated.connect(self.label_frame.update_rects)
-        self.label_frame.signal_rect_added.connect(self.video.add_tracker)
-        self.label_frame.signal_rect_deleted.connect(self.video.del_tracker)
+        self.video.signal_bboxes_updated.connect(self.label_frame.update_bboxes)
+        self.label_frame.signal_bbox_added.connect(self.video.add_tracker)
+        self.label_frame.signal_bbox_deleted.connect(self.video.del_tracker)
 
     def init_ui(self):
         self.grid_layout = QGridLayout()
@@ -263,18 +265,10 @@ class VideoWidget(QWidget):
             elif key == Qt.Key_Space:
                 self.video.play_ctrl(VideoStatus.pause)
                 return True
-        elif event.type() == QEvent.Wheel:
-            delta = event.angleDelta().y()
-            if delta > 0:
+            elif key == Qt.Key_N:
                 if self.section_idx < len(self.shots) - 1:
                     self.section_idx += 1
-                    self.video.section = self.shots[self.section_idx]
-                    self.video.play_ctrl(VideoStatus.frame_forward)
-            else:
-                if self.section_idx > 0:
-                    self.section_idx -= 1
-                    self.video.section = self.shots[self.section_idx]
-                    self.video.play_ctrl(VideoStatus.frame_backward)
+                    self.jump_to_section(self.section_idx)
         return False
 
     @pyqtSlot()
@@ -289,12 +283,14 @@ class VideoWidget(QWidget):
         if self.with_slider:
             self.slider.setEnabled(True)
         self.video.load(self.filename)
-        if os.path.isfile(self.filename + '.annotation'):
-            self.annotation.load(self.filename + '.annotation')
-            self.shots = self.annotation.data['shots']
-            self.shot_idx = 0
-        self.video.frame_forward()
         self.signal_video_loaded.emit(self.filename)
+        self.shots = [[0, self.video.frame_num - 1]]
+        # self.video.frame_forward()
+
+    @pyqtSlot(list)
+    def set_shots(self, shots):
+        self.shots = shots
+        self.jump_to_section(0)
 
     @pyqtSlot(QPixmap)
     def update_frame(self, pixmap):
@@ -310,14 +306,18 @@ class VideoWidget(QWidget):
     def on_slider_released(self):
         progress = self.slider.value() / self.slider.maximum()
         cursor = int(self.video.frame_num * progress)
-        self.video.jump_to_frame(cursor)
+        self.jump_to_frame(cursor)
 
     @pyqtSlot(int)
     def jump_to_frame(self, cursor):
+        self.label_frame.clear_rects()
         self.video.jump_to_frame(cursor)
 
     @pyqtSlot(int)
     def jump_to_section(self, section_idx):
         self.section_idx = section_idx
         self.video.section = self.shots[section_idx]
+        self.signal_section_changed.emit(section_idx)
+        self.label_frame.clear_bboxes()
         self.video.jump_to_frame(self.shots[self.section_idx][0])
+        self.video.signal_bboxes_updated.emit(self.video.frame_cursor, [])

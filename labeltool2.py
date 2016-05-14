@@ -14,11 +14,18 @@ class MainWindow(QMainWindow):
         self.init_ui()
         self.show()
         self.action_open.triggered.connect(self.video_widget.open_file)
+        self.action_save.triggered.connect(self.annotation_widget.save_annotations)
         self.video_widget.signal_video_loaded.connect(self.annotation_widget.load_annotation)
         self.video_widget.signal_frame_updated.connect(self.update_statusbar)
+        self.video_widget.video.signal_bboxes_updated.connect(self.annotation_widget.add_annotation)
+        self.video_widget.signal_section_changed.connect(self.annotation_widget.save_annotations)
+        self.video_widget.video.signal_bbox_added.connect(self.annotation_widget.add_bbox)
+        self.video_widget.video.signal_bbox_deleted.connect(self.annotation_widget.del_bbox)
         self.annotation_widget.signal_section_selected.connect(self.video_widget.jump_to_section)
         self.annotation_widget.combobox_word.currentTextChanged.connect(
             self.video_widget.label_frame.update_bbox_label)
+        self.annotation_widget.signal_shots_loaded.connect(self.video_widget.set_shots)
+        
 
     def center_window(self, w, h):
         desktop = QDesktopWidget()
@@ -51,6 +58,9 @@ class MainWindow(QMainWindow):
         self.action_open = QAction('&Open', menubar)
         self.action_open.setShortcut('Ctrl+O')
         menu_file.addAction(self.action_open)
+        self.action_save = QAction('&Save', menubar)
+        self.action_save.setShortcut('Ctrl+S')
+        menu_file.addAction(self.action_save)
 
     @pyqtSlot(int)
     def update_statusbar(self, frame_cursor):

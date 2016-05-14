@@ -32,10 +32,10 @@ class ShotDetector(object):
         for line in output.split('\n')[15: -1]:
             boundary = int(round(float(line.split('|')[4].split('=')[-1]) * fps))
             if len(shots) == 0:
-                shots.append((0, boundary - 1))
+                shots.append((0, boundary))
             else:
                 start = shots[-1][1] + 1
-                shots.append((start, boundary - 1))
+                shots.append((start, boundary))
         shots.append((shots[-1][1] + 1, frame_num - 1))
         if save:
             annotation = dict(shots=shots)

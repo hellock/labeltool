@@ -58,7 +58,7 @@ class Video(QObject):
         height, width, depth = tmp_img.shape
         bytes_per_line = depth * width
         qimg = QImage(tmp_img.data, width, height, bytes_per_line,
-                        QImage.Format_RGB888)
+                      QImage.Format_RGB888)
         pixmap = QPixmap.fromImage(qimg)
         return pixmap
 
@@ -160,7 +160,8 @@ class Video(QObject):
         bboxes = []
         for tracker in self.trackers:
             bbox = tracker.update(img)
-            bbox = bbox.intersected(QRect(0, 0, self.frame_width, self.frame_height))
+            bbox = bbox.intersected(QRect(0, 0, self.frame_width,
+                                          self.frame_height))
             bboxes.append(bbox)
         self.signal_bboxes_updated.emit(self.frame_cursor, bboxes)
 
@@ -193,6 +194,7 @@ class VideoWidget(QWidget):
         self.with_slider = with_slider
         self.video = Video(max_buf_size=max_buf_size, max_fps=max_fps)
         self.shots = []
+        self.section_idx = 0
         self.init_ui()
         self.installEventFilter(self)
         if self.with_slider:
@@ -283,14 +285,13 @@ class VideoWidget(QWidget):
         if self.with_slider:
             self.slider.setEnabled(True)
         self.video.load(self.filename)
-        self.signal_video_loaded.emit(self.filename)
         self.shots = [[0, self.video.frame_num - 1]]
-        # self.video.frame_forward()
+        self.signal_video_loaded.emit(self.filename)
+        self.jump_to_section(0)
 
     @pyqtSlot(list)
     def set_shots(self, shots):
         self.shots = shots
-        self.jump_to_section(0)
 
     @pyqtSlot(QPixmap)
     def update_frame(self, pixmap):
@@ -310,7 +311,7 @@ class VideoWidget(QWidget):
 
     @pyqtSlot(int)
     def jump_to_frame(self, cursor):
-        self.label_frame.clear_rects()
+        self.label_frame.clear_bboxes()
         self.video.jump_to_frame(cursor)
 
     @pyqtSlot(int)

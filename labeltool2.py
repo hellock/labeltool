@@ -25,7 +25,6 @@ class MainWindow(QMainWindow):
         self.annotation_widget.combobox_word.currentTextChanged.connect(
             self.video_widget.label_frame.update_bbox_label)
         self.annotation_widget.signal_shots_loaded.connect(self.video_widget.set_shots)
-        
 
     def center_window(self, w, h):
         desktop = QDesktopWidget()

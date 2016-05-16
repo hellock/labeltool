@@ -113,8 +113,8 @@ class ImageLabel(QLabel):
         self.setPixmap(scaled_pixmap)
         self.update()
 
-    @pyqtSlot(int, list)
-    def update_bboxes(self, frame_idx, bboxes):
+    @pyqtSlot(list)
+    def update_bboxes(self, bboxes):
         self.clear_bboxes()
         for bbox in bboxes:
             bbox_show = bbox.scaled(1 / self.scale_ratio).translated(

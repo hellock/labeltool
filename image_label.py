@@ -81,11 +81,11 @@ class ImageLabel(QLabel):
             self.update()
         elif event.button() == Qt.RightButton:
             if not self.mouse_down:
-                for i in range(len(self.bboxes)):
-                    if self.bboxes[i].contains(event.pos()):
+                for i, bbox in enumerate(self.bboxes):
+                    if bbox.contains(event.pos()):
                         self.bboxes.pop(i)
                         self.signal_bbox_deleted.emit(i)
-                        self.update()
+                self.update()
         self.mouse_down = False
         self.show_reticle = False
 

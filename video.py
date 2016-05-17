@@ -306,5 +306,6 @@ class Video(QObject):
 
     @pyqtSlot(int)
     def del_tracker(self, idx):
-        self.trackers.pop(idx)
+        if len(self.trackers) > idx:
+            self.trackers.pop(idx)
         self.annotation.del_bbox(self.frame_cursor, idx)

@@ -143,3 +143,12 @@ class VideoWidget(QWidget):
     @pyqtSlot()
     def save_annotations(self):
         self.video.annotation.save()
+
+    @pyqtSlot()
+    def export_video(self):
+        filename, _ = QFileDialog.getSaveFileName(
+            self, 'Export video', './', 'Videos (*.avi)')
+        t = threading.Thread(target=self.video.export,
+                             kwargs=dict(filename=filename))
+        t.daemon = True
+        t.start()

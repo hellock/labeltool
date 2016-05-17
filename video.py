@@ -96,6 +96,7 @@ class Annotation(object):
 class Video(QObject):
 
     signal_frame_updated = pyqtSignal(VideoFrame, list)
+    signal_export_progress = pyqtSignal(int)
 
     def __init__(self, filename=None, max_buf_size=500, max_fps=0):
         super(Video, self).__init__()
@@ -114,6 +115,7 @@ class Video(QObject):
             self.load(filename)
 
     def load(self, filename):
+        self.filename = filename
         self.cap = cv2.VideoCapture(filename)
         self.status = VideoStatus.pause
         self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -126,6 +128,33 @@ class Video(QObject):
         else:
             self.sections = [[0, self.frame_num - 1]]
         self.section_idx = 0
+
+    def export(self, filename):
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        writer = cv2.VideoWriter(filename, fourcc, self.fps,
+                                 (self.frame_width, self.frame_height))
+        cap = cv2.VideoCapture(self.filename)
+        frame_idx = 0
+        line_thickness = int(min(self.frame_width, self.frame_height) / 200)
+        while cap.isOpened():
+            ret, img = cap.read()
+            if ret != 0:
+                bboxes = self.annotation.get_bboxes(frame_idx)
+                for bbox in bboxes:
+                    cv2.rectangle(img, (bbox.left(), bbox.top()),
+                                  (bbox.right(), bbox.bottom()), (0, 0, 255),
+                                  line_thickness)
+                    cv2.putText(img, bbox.label, (bbox.x(), bbox.y()),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255),
+                                line_thickness)
+                writer.write(img)
+                frame_idx += 1
+                progress = int(round(100 * frame_idx / self.frame_num))
+                self.signal_export_progress.emit(progress)
+            else:
+                break
+        cap.release()
+        writer.release()
 
     def section_start(self):
         return self.sections[self.section_idx][0]

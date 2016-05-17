@@ -12,7 +12,6 @@ class MainWindow(QMainWindow):
     def __init__(self):
         QMainWindow.__init__(self)
         self.init_ui()
-        self.show()
         self.action_open.triggered.connect(self.video_widget.open_file)
         self.action_save.triggered.connect(self.video_widget.save_annotations)
         self.action_export.triggered.connect(self.video_widget.export_video)
@@ -23,6 +22,7 @@ class MainWindow(QMainWindow):
         self.annotation_widget.signal_section_selected.connect(self.video_widget.jump_to_section)
         self.annotation_widget.combobox_word.currentTextChanged.connect(
             self.video_widget.label_frame.update_bbox_label)
+        self.show()
 
     def center_window(self, w, h):
         desktop = QDesktopWidget()
@@ -36,16 +36,15 @@ class MainWindow(QMainWindow):
         self.init_menubar()
         self.init_statusbar()
 
-        grid_layout = QGridLayout()
-        grid_layout.setColumnStretch(0, 6)
-        grid_layout.setColumnStretch(1, 2)
         self.video_widget = VideoWidget(max_fps=50)
         self.annotation_widget = AnnotationWidget()
-        grid_layout.addWidget(self.video_widget, 0, 0)
-        grid_layout.addWidget(self.annotation_widget, 0, 1)
+
+        self.hbox_layout = QHBoxLayout()
+        self.hbox_layout.addWidget(self.video_widget, 3)
+        self.hbox_layout.addWidget(self.annotation_widget, 1)
 
         self.central_widget = QWidget(self)
-        self.central_widget.setLayout(grid_layout)
+        self.central_widget.setLayout(self.hbox_layout)
         self.setCentralWidget(self.central_widget)
 
     def init_menubar(self):

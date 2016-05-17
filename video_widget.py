@@ -29,43 +29,33 @@ class VideoWidget(QWidget):
         self.label_frame.signal_bbox_deleted.connect(self.video.del_tracker)
 
     def init_ui(self):
-        self.grid_layout = QGridLayout()
+        self.vbox_layout = QVBoxLayout()
         if self.with_filename:
-            stretch = [1, 10]
-        else:
-            stretch = [10]
+            self.init_label_filename()
+        self.init_label_frame()
         if self.with_slider:
-            stretch.append(1)
-        for i in range(len(stretch)):
-            self.grid_layout.setRowStretch(i, stretch[i])
-        if self.with_filename:
-            self.init_label_filename(0)
-            self.init_label_frame(1)
-        else:
-            self.init_label_frame(0)
-        if self.with_slider:
-            self.init_slider(len(stretch) - 1)
-        self.setLayout(self.grid_layout)
+            self.init_slider()
+        self.setLayout(self.vbox_layout)
         self.setFocusPolicy(Qt.StrongFocus)
 
-    def init_label_filename(self, row_pos):
+    def init_label_filename(self):
         self.label_filename = QLabel('filename')
         self.label_filename.setAlignment(Qt.AlignCenter)
-        self.grid_layout.addWidget(self.label_filename, row_pos, 0)
+        self.vbox_layout.addWidget(self.label_filename, 1)
 
-    def init_label_frame(self, row_pos):
+    def init_label_frame(self):
         self.label_frame = ImageLabel('video')
         self.label_frame.setAlignment(Qt.AlignCenter)
         self.label_frame.setStyleSheet('border: 1px solid black')
-        self.grid_layout.addWidget(self.label_frame, row_pos, 0)
+        self.vbox_layout.addWidget(self.label_frame, 10)
 
-    def init_slider(self, row_pos):
+    def init_slider(self):
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setRange(0, 1000)
         self.slider.setTickInterval(1)
         self.slider.setValue(0)
         self.slider.setEnabled(False)
-        self.grid_layout.addWidget(self.slider, row_pos, 0)
+        self.vbox_layout.addWidget(self.slider, 1)
 
     def eventFilter(self, object, event):
         if event.type() == QEvent.KeyPress:

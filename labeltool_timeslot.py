@@ -86,26 +86,6 @@ class VideoWidget(QWidget):
         else:
             return False
 
-    # def keyPressEvent(self, event):
-    #     key = event.key()
-    #     print('key pressed in video widget ', key)
-    #     if key == Qt.Key_D:
-    #         self.video.next_frame()
-    #     elif key == Qt.Key_A:
-    #         self.video.last_frame()
-    #     elif key == Qt.Key_Left:
-    #         if self.video.play_status >= 0:
-    #             self.signal_play_option.emit(-1)
-    #         else:
-    #             self.signal_play_option.emit(0)
-    #     elif key == Qt.Key_Right:
-    #         if self.video.play_status <= 0:
-    #             self.signal_play_option.emit(1)
-    #         else:
-    #             self.signal_play_option.emit(0)
-    #     elif key == Qt.Key_Space:
-    #         self.video.play_status = 0
-
     @pyqtSlot()
     def open_file(self):
         self.filename, _ = QFileDialog.getOpenFileName(

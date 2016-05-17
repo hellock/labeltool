@@ -1,6 +1,3 @@
-import cv2
-
-
 class Subtitle(object):
 
     def __init__(self, filename):

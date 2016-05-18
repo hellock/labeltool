@@ -75,9 +75,10 @@ class ImageLabel(QLabel):
             if self.bbox_label is not None:
                 self.end_pt = event.pos()
                 rect = self.pt2rect(self.start_pt, self.end_pt)
-                bbox = BoundingBox(self.bbox_label, 'manual', rect=rect)
-                self.bboxes.append(bbox)
-                self.signal_bbox_added.emit(self.proj_bbox_to_image(bbox))
+                if rect.width() > 4 and rect.height() > 4:
+                    bbox = BoundingBox(self.bbox_label, 'manual', rect=rect)
+                    self.bboxes.append(bbox)
+                    self.signal_bbox_added.emit(self.proj_bbox_to_image(bbox))
             self.update()
         elif event.button() == Qt.RightButton:
             if not self.mouse_down:

@@ -58,7 +58,7 @@ class Annotation(object):
     def save(self, filename=None):
         outfile = self.filename if filename is None else filename
         with open(outfile, 'w') as fout:
-            json.dump(self.data, fout)
+            json.dump(self.data, fout, indent=4)
 
     def sections(self):
         return self.data['sections']
@@ -232,7 +232,6 @@ class Video(QObject):
                 self.add2buf(self.frame_cursor, img)
         bboxes = self.annotation.get_bboxes(self.frame_cursor)
         self.clear_trackers()
-        # self.add_trackers(bboxes)
         self.signal_frame_updated.emit(VideoFrame(img, self.frame_cursor),
                                        bboxes)
 

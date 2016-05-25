@@ -1,5 +1,6 @@
 .DS_Store
 *.jpg
+*.pdf
 *.avi
 __pycache__/
 data/

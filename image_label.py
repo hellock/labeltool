@@ -87,8 +87,8 @@ class ImageLabel(QLabel):
                         self.bboxes.pop(i)
                         self.signal_bbox_deleted.emit(i)
                 self.update()
-        self.mouse_down = False
         self.show_reticle = False
+        self.mouse_down = False
 
     def mouseMoveEvent(self, event):
         self.cursor_pos = event.pos()
@@ -97,7 +97,7 @@ class ImageLabel(QLabel):
 
     def eventFilter(self, object, event):
         if event.type() == QEvent.KeyPress:
-            if event.key() == Qt.Key_V:
+            if event.key() == Qt.Key_V and not self.mouse_down:
                 self.show_reticle = not self.show_reticle
                 self.update()
                 return True

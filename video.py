@@ -1,5 +1,3 @@
-import json
-import os
 import threading
 import time
 from collections import OrderedDict
@@ -9,6 +7,7 @@ import cv2
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import QObject, QRect, pyqtSignal, pyqtSlot
 
+from annotation import Annotation
 from bbox import BoundingBox
 from tracker import Tracker
 
@@ -24,10 +23,10 @@ class VideoStatus(Enum):
 
 class VideoFrame(QPixmap):
 
-    def __init__(self, img, idx):
+    def __init__(self, img, id):
         qimage = self.mat2qimage(img)
         super(VideoFrame, self).__init__(QPixmap.fromImage(qimage))
-        self.idx = idx
+        self.id = id
 
     def mat2qimage(self, img):
         rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -37,78 +36,42 @@ class VideoFrame(QPixmap):
                         QImage.Format_RGB888)
         return qimage
 
-    def get_idx(self):
-        return self.idx
 
+class VideoBuffer(object):
 
-class Annotation(object):
+    def __init__(self, max_size):
+        self.buf = OrderedDict()
+        self.max_size = max_size
 
-    def __init__(self, filename=None):
-        self.data = dict(sections=[], objects={})
-        if filename is not None:
-            self.load(filename)
+    def put(self, frame_id, img):
+        if frame_id in self.buf:
+            return
+        if len(self.buf) >= self.max_size:
+            self.buf.popitem(last=False)
+        self.buf[frame_id] = img
 
-    def load(self, filename):
-        self.filename = filename
-        with open(filename, 'r') as fin:
-            self.data = json.load(fin)
-        if 'objects' not in self.data:
-            self.data['objects'] = OrderedDict()
-
-    def save(self, filename=None):
-        outfile = self.filename if filename is None else filename
-        with open(outfile, 'w') as fout:
-            json.dump(self.data, fout, indent=4)
-
-    def sections(self):
-        return self.data['sections']
-
-    def objects(self):
-        return self.data['objects']
-
-    def clear_bbox(self, frame_idx):
-        self.data['objects'][str(frame_idx)] = []
-
-    def add_bbox(self, frame_idx, bbox):
-        if str(frame_idx) not in self.data['objects']:
-            self.data['objects'][str(frame_idx)] = []
-        self.data['objects'][str(frame_idx)].append(
-            dict(bbox=bbox.to_list(), label=bbox.label, mode=bbox.mode))
-
-    def del_bbox(self, frame_idx, bbox_idx):
-        self.data['objects'][str(frame_idx)].pop(bbox_idx)
-
-    def add_bboxes(self, frame_idx, bboxes):
-        self.clear_bbox(frame_idx)
-        for bbox in bboxes:
-            self.add_bbox(frame_idx, bbox)
-
-    def get_bboxes(self, frame_idx):
-        bboxes = []
-        if str(frame_idx) in self.data['objects']:
-            annotation = self.data['objects'][str(frame_idx)]
-            for item in annotation:
-                bbox = BoundingBox(item['label'], item['mode'], *item['bbox'])
-                bboxes.append(bbox)
-        return bboxes
+    def get(self, frame_id):
+        if frame_id in self.buf:
+            return self.buf[frame_id]
+        else:
+            return None
 
 
 class Video(QObject):
 
-    signal_frame_updated = pyqtSignal(VideoFrame, list)
+    signal_frame_updated = pyqtSignal(VideoFrame, dict)
+    signal_tube_annotated = pyqtSignal(list)
     signal_export_progress = pyqtSignal(int)
 
     def __init__(self, filename=None, max_buf_size=500, max_fps=0):
         super(Video, self).__init__()
         self.cap = cv2.VideoCapture()
-        self.sections = None
-        self.section_idx = 0
+        self.reset_tube_id()
         self.status = VideoStatus.not_loaded
-        self.frame_cursor = -1
-        self.frame_buf = OrderedDict()
-        self.max_buf_size = max_buf_size
+        self.frame_cursor = 0
+        self.video_buffer = VideoBuffer(max_buf_size)
         self.max_fps = max_fps
-        self.trackers = []
+        self.tracker = None
         self.annotation = Annotation()
         self.filename = filename
         if filename is not None:
@@ -122,133 +85,126 @@ class Video(QObject):
         self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fps = int(round(self.cap.get(cv2.CAP_PROP_FPS)))
         self.frame_num = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        if os.path.isfile(filename + '.annotation'):
-            self.annotation.load(filename + '.annotation')
-            self.sections = self.annotation.sections()
-        else:
-            self.sections = [[0, self.frame_num - 1]]
-        self.section_idx = 0
+        self.annotation.load(filename + '.annotation')
 
-    def export(self, filename):
-        fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        writer = cv2.VideoWriter(filename, fourcc, self.fps,
+    def export(self, filename, start=1, end=0):
+        writer = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*'XVID'),
+                                 self.fps,
                                  (self.frame_width, self.frame_height))
-        cap = cv2.VideoCapture(self.filename)
         frame_idx = 0
+        end = self.frame_num if end == 0 else end
+        export_num = end - start + 1
+        cap = cv2.VideoCapture(self.filename)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start - 1)
         line_thickness = int(min(self.frame_width, self.frame_height) / 200)
-        while cap.isOpened():
+        while cap.isOpened() and frame_idx <= end:
             ret, img = cap.read()
-            if ret != 0:
-                bboxes = self.annotation.get_bboxes(frame_idx)
-                for bbox in bboxes:
-                    cv2.rectangle(img, (bbox.left(), bbox.top()),
-                                  (bbox.right(), bbox.bottom()), (0, 0, 255),
-                                  line_thickness)
-                    cv2.putText(img, bbox.label, (bbox.x(), bbox.y()),
-                                cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255),
-                                line_thickness)
-                writer.write(img)
-                frame_idx += 1
-                progress = int(round(100 * frame_idx / self.frame_num))
-                self.signal_export_progress.emit(progress)
-            else:
+            if ret == 0:
                 break
+            bboxes = self.annotation.get_bboxes(frame_idx + start)
+            for bbox in bboxes:
+                cv2.rectangle(img, (bbox.left(), bbox.top()),
+                              (bbox.right(), bbox.bottom()), (0, 0, 255),
+                              line_thickness)
+                cv2.putText(img, bbox.label, (bbox.x(), bbox.y()),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255),
+                            line_thickness)
+            writer.write(img)
+            frame_idx += 1
+            progress = int(round(100 * frame_idx / export_num))
+            self.signal_export_progress.emit(progress)
         cap.release()
         writer.release()
 
-    def section_start(self):
-        return self.sections[self.section_idx][0]
+    def reset_tube_id(self):
+        self.tube_id = 0
 
-    def section_end(self):
-        return self.sections[self.section_idx][1]
+    def tube_start(self):
+        return self.annotation.tube(self.tube_id).start
 
-    def add2buf(self, cursor, img):
-        if cursor in self.frame_buf:
-            return
-        if len(self.frame_buf) >= self.max_buf_size:
-            self.frame_buf.popitem(last=False)
-        self.frame_buf[cursor] = img
+    def tube_end(self):
+        return self.annotation.tube(self.tube_id).end
+
+    def add_tube(self, label):
+        self.tube_id = self.annotation.next_tube_id
+        self.annotation.add_tube(label, self.frame_cursor)
 
     def frame_forward(self):
-        if self.frame_cursor >= self.section_end():
+        if self.frame_cursor >= self.frame_num:
             self.status = VideoStatus.pause
             return
         self.frame_cursor += 1
         if self.status != VideoStatus.play_forward:
             self.status = VideoStatus.frame_forward
-        if self.frame_cursor in self.frame_buf:
-            img = self.frame_buf[self.frame_cursor]
-        else:
+        img = self.video_buffer.get(self.frame_cursor)
+        if img is None:
             ret, img = self.cap.read()
             if ret == 0:
                 return
-            else:
-                self.add2buf(self.frame_cursor, img)
-        if len(self.trackers) == 0:
-            bboxes = self.annotation.get_bboxes(self.frame_cursor)
+            self.video_buffer.put(self.frame_cursor, img)
+        if self.tracker is not None:
+            current_tube_bbox = self.track(img)
         else:
-            bboxes = self.track(img)
+            current_tube_bbox = self.annotation.get_bbox(self.tube_id,
+                                                         self.frame_cursor)
+        other_tube_bboxes = self.annotation.get_bboxes(self.frame_cursor,
+                                                       self.tube_id)
         self.signal_frame_updated.emit(VideoFrame(img, self.frame_cursor),
-                                       bboxes)
+                                       dict(current_tube=current_tube_bbox,
+                                            other_tubes=other_tube_bboxes))
 
     def frame_backward(self):
-        if self.frame_cursor <= self.section_start():
+        if self.frame_cursor <= 1:
             self.status = VideoStatus.pause
             return
         self.frame_cursor -= 1
         if self.status != VideoStatus.play_backward:
             self.status = VideoStatus.frame_backward
-        if self.frame_cursor in self.frame_buf:
-            img = self.frame_buf[self.frame_cursor]
-        else:
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.frame_cursor)
+        img = self.video_buffer.get(self.frame_cursor)
+        if img is None:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.frame_cursor - 1)
             ret, img = self.cap.read()
             if ret == 0:
                 return
-            else:
-                self.add2buf(self.frame_cursor, img)
-        bboxes = self.annotation.get_bboxes(self.frame_cursor)
+            self.video_buffer.put(self.frame_cursor, img)
+        current_tube_bbox = self.annotation.get_bbox(self.tube_id,
+                                                     self.frame_cursor)
+        other_tube_bboxes = self.annotation.get_bboxes(self.frame_cursor,
+                                                       self.tube_id)
         self.signal_frame_updated.emit(VideoFrame(img, self.frame_cursor),
-                                       bboxes)
+                                       dict(current_tube=current_tube_bbox,
+                                            other_tubes=other_tube_bboxes))
 
     def jump_to_frame(self, cursor):
         self.status = VideoStatus.pause
-        if cursor < 0 or cursor >= self.frame_num:
+        if cursor < 1 or cursor > self.frame_num:
             return
         self.frame_cursor = cursor
-        if cursor < self.section_start() or cursor > self.section_end():
-            for idx, section in enumerate(self.sections):
-                if cursor <= section[1]:
-                    self.section_idx = idx
-                    break
-        if self.frame_cursor in self.frame_buf:
-            img = self.frame_buf[self.frame_cursor]
-        else:
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.frame_cursor)
+        self.clear_tracker()
+        img = self.video_buffer.get(self.frame_cursor)
+        if img is None:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.frame_cursor - 1)
             ret, img = self.cap.read()
             if ret == 0:
                 return
-            else:
-                self.add2buf(self.frame_cursor, img)
-        bboxes = self.annotation.get_bboxes(self.frame_cursor)
-        self.clear_trackers()
+            self.video_buffer.put(self.frame_cursor, img)
+        current_tube_bbox = self.annotation.get_bbox(self.tube_id,
+                                                     self.frame_cursor)
+        other_tube_bboxes = self.annotation.get_bboxes(self.frame_cursor,
+                                                       self.tube_id)
         self.signal_frame_updated.emit(VideoFrame(img, self.frame_cursor),
-                                       bboxes)
+                                       dict(current_tube=current_tube_bbox,
+                                            other_tubes=other_tube_bboxes))
 
-    def jump_to_section(self, section_idx):
-        self.section_idx = section_idx
-        self.jump_to_frame(self.section_start())
+    def jump_to_tube(self, tube_id):
+        self.tube_id = tube_id
+        self.jump_to_frame(self.tube_start())
         self.annotation.save()
-
-    def jump_to_next_section(self):
-        if self.section_idx < len(self.sections) - 1:
-            self.section_idx += 1
-            self.jump_to_section(self.section_idx)
 
     def play_forward(self):
         min_interval = 1 / self.max_fps if self.max_fps > 0 else 0
         while (self.status == VideoStatus.play_forward and
-               self.frame_cursor < self.section_end()):
+               self.frame_cursor < self.frame_num):
             start = time.time()
             self.frame_forward()
             ellapsed = time.time() - start
@@ -258,7 +214,7 @@ class Video(QObject):
     def play_backward(self):
         min_interval = 1 / self.max_fps if self.max_fps > 0 else 0
         while (self.status == VideoStatus.play_backward and
-               self.frame_cursor > self.section_start()):
+               self.frame_cursor > 1):
             start = time.time()
             self.frame_backward()
             ellapsed = time.time() - start
@@ -281,30 +237,25 @@ class Video(QObject):
             self.frame_backward()
 
     def track(self, img):
-        bboxes = []
         frame_rect = QRect(0, 0, self.frame_width, self.frame_height)
-        for tracker in self.trackers:
-            bbox = tracker.update(img).intersected(frame_rect)
-            bboxes.append(bbox)
-        self.annotation.add_bboxes(self.frame_cursor, bboxes)
-        return bboxes
+        bbox = self.tracker.update(img).intersected(frame_rect)
+        self.annotation.set_bbox(self.tube_id, self.frame_cursor, bbox)
+        return bbox
 
-    def add_trackers(self, bboxes):
-        for bbox in bboxes:
-            self.add_tracker(bbox)
-
-    def clear_trackers(self):
-        self.trackers = []
+    def clear_tracker(self):
+        self.tracker = None
 
     @pyqtSlot(BoundingBox)
-    def add_tracker(self, bbox):
-        tracker = Tracker()
-        tracker.start_track(self.frame_buf[self.frame_cursor], bbox)
-        self.trackers.append(tracker)
-        self.annotation.add_bbox(self.frame_cursor, bbox)
+    def set_tracker(self, bbox):
+        self.tracker = Tracker()
+        self.tracker.start_track(self.video_buffer.get(self.frame_cursor), bbox)
+        self.annotation.set_bbox(self.tube_id, self.frame_cursor, bbox)
 
-    @pyqtSlot(int)
-    def del_tracker(self, idx):
-        if len(self.trackers) > idx:
-            self.trackers.pop(idx)
-        self.annotation.del_bbox(self.frame_cursor, idx)
+    @pyqtSlot()
+    def del_tracker(self):
+        self.clear_tracker()
+        self.annotation.del_later_bboxes(self.tube_id, self.frame_cursor)
+        self.annotation.save()
+        tube_info = self.annotation.tube(self.tube_id).brief_info()
+        self.signal_tube_annotated.emit([tube_info])
+        self.reset_tube_id()

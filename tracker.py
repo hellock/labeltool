@@ -22,4 +22,4 @@ class Tracker(dlib.correlation_tracker):
         r = int(rect.right())
         t = int(rect.top())
         b = int(rect.bottom())
-        return BoundingBox(self.label, 'track', l, t, r - l, b - t)
+        return BoundingBox(self.label, l, t, r - l, b - t)

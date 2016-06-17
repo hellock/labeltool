@@ -2,9 +2,13 @@
 
 import sys
 
-from PyQt5.QtWidgets import QMainWindow
-from video_widget import *
-from annotation_widget import *
+from PyQt5.QtWidgets import *
+from PyQt5.QtCore import *
+
+from bbox import BoundingBox
+from annotation_widget import AnnotationWidget
+from video import VideoFrame
+from video_widget import VideoWidget
 
 
 class MainWindow(QMainWindow):
@@ -12,16 +16,25 @@ class MainWindow(QMainWindow):
     def __init__(self):
         QMainWindow.__init__(self)
         self.init_ui()
+        # menu actions
         self.action_open.triggered.connect(self.video_widget.open_file)
         self.action_save.triggered.connect(self.video_widget.save_annotations)
         self.action_export.triggered.connect(self.video_widget.export_video)
-        self.video_widget.signal_sections_loaded.connect(self.annotation_widget.show_sections)
-        self.video_widget.signal_section_changed.connect(self.annotation_widget.select_section)
-        self.video_widget.signal_frame_updated.connect(self.update_frame_idx)
-        self.video_widget.video.signal_export_progress.connect(self.update_export_progress)
-        self.annotation_widget.signal_section_selected.connect(self.video_widget.jump_to_section)
+        # video widget signals
+        self.video_widget.signal_annotation_loaded.connect(
+            self.annotation_widget.show_annotations)
+        self.video_widget.video.signal_frame_updated.connect(
+            self.update_frame_idx)
+        self.video_widget.video.signal_tube_annotated.connect(
+            self.annotation_widget.show_annotations)
+        self.video_widget.video.signal_export_progress.connect(
+            self.update_export_progress)
+        # annotation widget signals
         self.annotation_widget.combobox_word.currentTextChanged.connect(
             self.video_widget.label_frame.update_bbox_label)
+        self.annotation_widget.signal_tube_selected.connect(
+            self.video_widget.jump_to_tube)
+        # show the window
         self.show()
 
     def center_window(self, w, h):
@@ -32,7 +45,7 @@ class MainWindow(QMainWindow):
 
     def init_ui(self):
         self.setWindowTitle('LabelTool')
-        self.center_window(800, 600)
+        self.center_window(1200, 800)
         self.init_menubar()
         self.init_statusbar()
 
@@ -70,11 +83,11 @@ class MainWindow(QMainWindow):
         statusbar.addWidget(self.label_frame_idx)
         statusbar.addPermanentWidget(self.progressbar_export)
 
-    @pyqtSlot(int)
-    def update_frame_idx(self, frame_cursor):
-        frame_num = self.video_widget.video.frame_num
-        self.label_frame_idx.setText(' Frame {}/{}'.format(
-            frame_cursor, frame_num))
+    @pyqtSlot(VideoFrame, dict)
+    def update_frame_idx(self, frame, bboxes):
+        frame_id = frame.id
+        total_num = self.video_widget.video.frame_num
+        self.label_frame_idx.setText(' Frame {}/{}'.format(frame_id, total_num))
 
     @pyqtSlot(int)
     def update_export_progress(self, progress):

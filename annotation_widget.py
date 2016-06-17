@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import *
 
 
 class AnnotationWidget(QWidget):
-    signal_section_selected = pyqtSignal(int)
+    signal_tube_selected = pyqtSignal(int)
 
     def __init__(self):
         super(AnnotationWidget, self).__init__()
@@ -23,6 +23,13 @@ class AnnotationWidget(QWidget):
         self.vbox_layout.addLayout(self.hbox_layout, 1)
         self.setLayout(self.vbox_layout)
 
+    def set_words(self, words):
+        self.combobox_word.clear()
+        for word in words:
+            if word.strip() == '':
+                continue
+            self.combobox_word.addItem(word)
+
     @pyqtSlot()
     def add_word(self):
         word = self.lineedit_word.text()
@@ -35,17 +42,27 @@ class AnnotationWidget(QWidget):
         self.lineedit_word.setText('')
 
     @pyqtSlot(list)
-    def show_sections(self, sections):
-        for section in sections:
-            self.list_widget.addItem('{section[0]} - {section[1]}'.format(
-                section=section))
+    def show_annotations(self, annotations):
+        """show a list of tube info
+        format: {id: label: start-end}
+        """
+        for tube in annotations:
+            item_str = '{0[0]}: {0[1]}: {0[2]}-{0[3]}'.format(tube)
+            self.list_widget.addItem(item_str)
         self.list_widget.update()
+        # add words in annotations to combobox
+        unique_labels = set()
+        for tube in annotations:
+            unique_labels.add(tube[1])
+        self.set_words(list(unique_labels))
 
-    @pyqtSlot(int)
-    def select_section(self, section_idx):
-        self.list_widget.setCurrentRow(section_idx)
+    # @pyqtSlot(int)
+    # def select_section(self, section_idx):
+    #     self.list_widget.setCurrentRow(section_idx)
 
     @pyqtSlot(QListWidgetItem)
     def on_item_double_clicked(self, item):
-        section_idx = self.list_widget.row(item)
-        self.signal_section_selected.emit(section_idx)
+        tube_info = item.text().split(':')
+        tube_id = int(tube_info[0])
+        self.combobox_word.setCurrentText(tube_info[1])
+        self.signal_tube_selected.emit(tube_id)

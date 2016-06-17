@@ -7,26 +7,23 @@ from bbox import BoundingBox
 
 class ImageLabel(QLabel):
     signal_bbox_added = pyqtSignal(BoundingBox)
-    signal_bbox_deleted = pyqtSignal(int)
+    signal_bbox_deleted = pyqtSignal()
 
     def __init__(self, *args):
+        super(ImageLabel, self).__init__(*args)
         self.start_pt = None
         self.end_pt = None
         self.cursor_pos = None
         self.mouse_down = False
         self.show_reticle = False
-        self.bboxes = []
         self.bbox_label = None
-        super(ImageLabel, self).__init__(*args)
+        self.clear_bboxes()
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
         self.installEventFilter(self)
 
-    def set_bboxes(self, bboxes):
-        self.bboxes = bboxes
-
     def clear_bboxes(self):
-        self.bboxes = []
+        self.bboxes = dict(current_tube=None, other_tubes=[])
 
     def pt2rect(self, pt1, pt2):
         left = min(pt1.x(), pt2.x())
@@ -35,10 +32,14 @@ class ImageLabel(QLabel):
         bottom = max(pt1.y(), pt2.y())
         return QRect(left, top, right - left, bottom - top)
 
-    def proj_bbox_to_image(self, bbox):
+    def proj_to_real_img(self, bbox):
         roi_bbox = bbox.intersected(self.img_region).translated(
             -self.img_region.topLeft())
         return roi_bbox.scaled(self.scale_ratio)
+
+    def proj_to_image_label(self, bbox):
+        return bbox.scaled(1 / self.scale_ratio).translated(
+            self.img_region.topLeft())
 
     def draw_bbox(self, painter, bbox):
         painter.drawRect(bbox)
@@ -53,9 +54,11 @@ class ImageLabel(QLabel):
         painter = QPainter()
         painter.begin(self)
         painter.setPen(QPen(Qt.red, 2, Qt.SolidLine))
-        for i in range(len(self.bboxes)):
-            bbox = self.bboxes[i]
+        for bbox in self.bboxes['other_tubes']:
             self.draw_bbox(painter, bbox)
+        painter.setPen(QPen(Qt.green, 2, Qt.SolidLine))
+        if self.bboxes['current_tube'] is not None:
+            self.draw_bbox(painter, self.bboxes['current_tube'])
         if not self.mouse_down:
             if self.cursor_pos is not None and self.show_reticle:
                 self.draw_reticle(painter, self.cursor_pos)
@@ -75,19 +78,18 @@ class ImageLabel(QLabel):
             if self.bbox_label is not None:
                 self.end_pt = event.pos()
                 rect = self.pt2rect(self.start_pt, self.end_pt)
-                if rect.width() > 4 and rect.height() > 4:
-                    bbox = BoundingBox(self.bbox_label, 'manual', rect=rect)
-                    self.bboxes.append(bbox)
-                    self.signal_bbox_added.emit(self.proj_bbox_to_image(bbox))
+                if rect.width() > 5 and rect.height() > 5:
+                    bbox = BoundingBox(self.bbox_label, rect=rect)
+                    self.bboxes['current_tube'] = bbox
+                    self.signal_bbox_added.emit(self.proj_to_real_img(bbox))
             self.update()
         elif event.button() == Qt.RightButton:
             if not self.mouse_down:
-                for i, bbox in enumerate(self.bboxes):
-                    if bbox.contains(event.pos()):
-                        self.bboxes.pop(i)
-                        self.signal_bbox_deleted.emit(i)
+                bbox = self.bboxes['current_tube']
+                if bbox is not None and bbox.contains(event.pos()):
+                    self.bboxes['current_tube'] = None
+                    self.signal_bbox_deleted.emit()
                 self.update()
-        self.show_reticle = False
         self.mouse_down = False
 
     def mouseMoveEvent(self, event):
@@ -98,10 +100,16 @@ class ImageLabel(QLabel):
     def eventFilter(self, object, event):
         if event.type() == QEvent.KeyPress:
             if event.key() == Qt.Key_V and not self.mouse_down:
-                self.show_reticle = not self.show_reticle
-                self.update()
+                self.toggle_reticle()
                 return True
         return False
+
+    def toggle_reticle(self, force_show=False):
+        if force_show:
+            self.show_reticle = True
+        else:
+            self.show_reticle = not self.show_reticle
+        self.update()
 
     def show_img(self, pixmap):
         self.scale_ratio = max(pixmap.width() / self.width(),
@@ -117,10 +125,12 @@ class ImageLabel(QLabel):
     @pyqtSlot(list)
     def update_bboxes(self, bboxes):
         self.clear_bboxes()
-        for bbox in bboxes:
-            bbox_show = bbox.scaled(1 / self.scale_ratio).translated(
-                self.img_region.topLeft())
-            self.bboxes.append(bbox_show)
+        if bboxes['current_tube'] is not None:
+            self.bboxes['current_tube'] = self.proj_to_image_label(
+                bboxes['current_tube'])
+        for bbox in bboxes['other_tubes']:
+            self.bboxes['other_tubes'].append(
+                self.proj_to_image_label(bbox))
 
     @pyqtSlot(str)
     def update_bbox_label(self, label):

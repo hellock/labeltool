@@ -10,8 +10,7 @@ from video import *
 
 class VideoWidget(QWidget):
     signal_play_ctrl = pyqtSignal(VideoStatus)
-    signal_sections_loaded = pyqtSignal(list)
-    signal_frame_updated = pyqtSignal(int)
+    signal_annotation_loaded = pyqtSignal(list)
     signal_section_changed = pyqtSignal(int)
 
     def __init__(self, parent=None, with_filename=True, with_slider=True,
@@ -25,7 +24,7 @@ class VideoWidget(QWidget):
         if self.with_slider:
             self.slider.sliderReleased.connect(self.on_slider_released)
         self.video.signal_frame_updated.connect(self.update_frame)
-        self.label_frame.signal_bbox_added.connect(self.video.add_tracker)
+        self.label_frame.signal_bbox_added.connect(self.video.set_tracker)
         self.label_frame.signal_bbox_deleted.connect(self.video.del_tracker)
 
     def init_ui(self):
@@ -66,6 +65,12 @@ class VideoWidget(QWidget):
             elif key == Qt.Key_A:
                 self.video.play_ctrl(VideoStatus.frame_backward)
                 return True
+            elif key == Qt.Key_S:
+                self.video.annotation.save()
+                if self.label_frame.bbox_label is not None:
+                    self.video.add_tube(self.label_frame.bbox_label)
+                    self.label_frame.toggle_reticle(True)
+                return True
             elif key == Qt.Key_Left:
                 if self.video.status == VideoStatus.play_backward:
                     self.video.play_ctrl(VideoStatus.pause)
@@ -81,9 +86,6 @@ class VideoWidget(QWidget):
             elif key == Qt.Key_Space:
                 self.video.play_ctrl(VideoStatus.pause)
                 return True
-            elif key == Qt.Key_N:
-                self.video.jump_to_next_section()
-                self.signal_section_changed.emit(self.video.section_idx)
         return False
 
     @pyqtSlot()
@@ -98,19 +100,19 @@ class VideoWidget(QWidget):
         if self.with_slider:
             self.slider.setEnabled(True)
         self.video.load(self.filename)
-        self.signal_sections_loaded.emit(self.video.sections)
-        self.jump_to_section(0)
+        self.jump_to_frame(1)
+        self.signal_annotation_loaded.emit(
+            self.video.annotation.get_brief_info())
 
-    @pyqtSlot(VideoFrame, list)
+    @pyqtSlot(VideoFrame, dict)
     def update_frame(self, frame, bboxes):
         self.label_frame.show_img(frame)
         self.label_frame.update_bboxes(bboxes)
-        frame_cursor = self.video.frame_cursor
+        frame_id = frame.id
         frame_num = self.video.frame_num
         if self.with_slider:
             self.slider.setValue(
-                int(frame_cursor * self.slider.maximum() / frame_num))
-        self.signal_frame_updated.emit(frame_cursor)  # update statusbar
+                int(self.slider.maximum() * frame_id / frame_num))
 
     @pyqtSlot()
     def on_slider_released(self):
@@ -122,13 +124,10 @@ class VideoWidget(QWidget):
     def jump_to_frame(self, cursor):
         self.label_frame.clear_bboxes()
         self.video.jump_to_frame(cursor)
-        self.signal_section_changed.emit(self.video.section_idx)
 
     @pyqtSlot(int)
-    def jump_to_section(self, section_idx):
-        self.video.jump_to_section(section_idx)
-        self.signal_section_changed.emit(section_idx)
-        # self.label_frame.clear_bboxes()
+    def jump_to_tube(self, tube_id):
+        self.video.jump_to_tube(tube_id)
 
     @pyqtSlot()
     def save_annotations(self):

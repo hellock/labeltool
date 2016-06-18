@@ -35,12 +35,13 @@ class Tube(object):
     def set_end(self, end):
         self.end = end
 
-    def brief_info(self):
-        return [self.id, self.label, self.start, self.end]
-
-    def to_dict(self):
-        return dict(label=self.label, start=self.start, end=self.end,
-                    bboxes=self.bboxes)
+    def to_dict(self, with_id=False, with_bbox=True):
+        tube_dict = dict(label=self.label, start=self.start, end=self.end)
+        if with_id:
+            tube_dict['id'] = self.id
+        if with_bbox:
+            tube_dict['bboxes'] = self.bboxes
+        return tube_dict
 
 
 class Annotation(object):
@@ -81,6 +82,12 @@ class Annotation(object):
         else:
             return None
 
+    def tube_start(self, tube_id):
+        return self.tubes[tube_id].start
+
+    def tube_end(self, tube_id):
+        return self.tubes[tube_id].end
+
     def add_tube(self, label, start):
         self.tubes[self.next_tube_id] = Tube(self.next_tube_id, label, start)
         self.next_tube_id += 1
@@ -114,5 +121,5 @@ class Annotation(object):
     def get_brief_info(self):
         info = []
         for tube in self.tubes.values():
-            info.append(tube.brief_info())
+            info.append(tube.to_dict(with_id=True, with_bbox=False))
         return info

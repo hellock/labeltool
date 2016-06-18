@@ -4,14 +4,19 @@ from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 
+from annotation import Annotation
+from bbox import BoundingBox
 from image_label import ImageLabel
+from tracker import Tracker
 from video import *
 
 
 class VideoWidget(QWidget):
-    signal_play_ctrl = pyqtSignal(VideoStatus)
-    signal_annotation_loaded = pyqtSignal(list)
-    signal_section_changed = pyqtSignal(int)
+
+    frame_updated = pyqtSignal(int)
+    tube_annotated = pyqtSignal(dict)
+    annotation_loaded = pyqtSignal(list)
+    export_progress_updated = pyqtSignal(int)
 
     def __init__(self, parent=None, with_filename=True, with_slider=True,
                  max_buf_size=500, max_fps=0):
@@ -19,13 +24,17 @@ class VideoWidget(QWidget):
         self.with_filename = with_filename
         self.with_slider = with_slider
         self.video = Video(max_buf_size=max_buf_size, max_fps=max_fps)
+        self.annotation = Annotation()
+        self.tube_id = 0
+        self.tracker = None
         self.init_ui()
         self.installEventFilter(self)
         if self.with_slider:
             self.slider.sliderReleased.connect(self.on_slider_released)
-        self.video.signal_frame_updated.connect(self.update_frame)
-        self.label_frame.signal_bbox_added.connect(self.video.set_tracker)
-        self.label_frame.signal_bbox_deleted.connect(self.video.del_tracker)
+        self.label_frame.bbox_added.connect(self.set_tracker)
+        self.label_frame.bbox_deleted.connect(self.del_tracker)
+        self.video.frame_updated.connect(self.update_frame)
+        self.video.export_progress_updated.connect(self.update_export_progress)
 
     def init_ui(self):
         self.vbox_layout = QVBoxLayout()
@@ -60,33 +69,137 @@ class VideoWidget(QWidget):
         if event.type() == QEvent.KeyPress:
             key = event.key()
             if key == Qt.Key_D:
-                self.video.play_ctrl(VideoStatus.frame_forward)
+                self.frame_forward()
                 return True
             elif key == Qt.Key_A:
-                self.video.play_ctrl(VideoStatus.frame_backward)
+                self.frame_backward()
                 return True
             elif key == Qt.Key_S:
-                self.video.annotation.save()
-                if self.label_frame.bbox_label is not None:
-                    self.video.add_tube(self.label_frame.bbox_label)
-                    self.label_frame.toggle_reticle(True)
+                # self.annotation.save()
+                self.new_tube()
                 return True
             elif key == Qt.Key_Left:
-                if self.video.status == VideoStatus.play_backward:
-                    self.video.play_ctrl(VideoStatus.pause)
+                if self.status() == VideoStatus.play_backward:
+                    self.pause()
                 elif self.video.status != VideoStatus.not_loaded:
-                    self.video.play_ctrl(VideoStatus.play_backward)
+                    self.play_backward()
                 return True
             elif key == Qt.Key_Right:
-                if self.video.status == VideoStatus.play_forward:
-                    self.video.play_ctrl(VideoStatus.pause)
-                elif self.video.status != VideoStatus.not_loaded:
-                    self.video.play_ctrl(VideoStatus.play_forward)
+                if self.status() == VideoStatus.play_forward:
+                    self.pause()
+                elif self.status() != VideoStatus.not_loaded:
+                    self.play_forward()
                 return True
             elif key == Qt.Key_Space:
-                self.video.play_ctrl(VideoStatus.pause)
+                self.pause()
                 return True
         return False
+
+    def frame_forward(self):
+        frame = self.video.frame_forward()
+        self.update_frame(frame)
+
+    def frame_backward(self):
+        frame = self.video.frame_backward()
+        self.update_frame(frame)
+
+    def play_forward(self):
+        self.video.play_forward()
+
+    def play_backward(self):
+        self.video.play_backward()
+
+    def pause(self):
+        self.video.pause()
+
+    def jump_to_frame(self, frame_id):
+        self.clear_tracker()
+        frame = self.video.jump_to_frame(frame_id)
+        self.update_frame(frame)
+
+    def status(self):
+        return self.video.status
+
+    def cursor(self):
+        return self.video.cursor
+
+    def frame_cnt(self):
+        return self.video.frame_cnt
+
+    def current_frame(self):
+        return self.video.current_frame()
+
+    def new_tube(self):
+        label = self.label_frame.bbox_label
+        if label is not None:
+            self.tube_id = self.annotation.next_tube_id
+            self.annotation.add_tube(label, self.cursor())
+            self.label_frame.toggle_reticle(True)
+
+    def clear_tracker(self):
+        self.tracker = None
+
+    def reset_tube_id(self):
+        self.tube_id = 0
+
+    def track(self, frame):
+        frame_rect = QRect(0, 0, self.video.width, self.video.height)
+        bbox = self.tracker.update(frame).intersected(frame_rect)
+        return bbox
+
+    @pyqtSlot(VideoFrame)
+    def update_frame(self, frame):
+        # get bounding boxes of current tube and other tubes
+        bboxes = dict()
+        if self.tracker is not None and self.video.is_forward():
+            bboxes['current_tube'] = self.track(frame)
+            self.annotation.set_bbox(self.tube_id, self.cursor(),
+                                     bboxes['current_tube'])
+        else:
+            bboxes['current_tube'] = self.annotation.get_bbox(
+                self.tube_id, self.cursor())
+        bboxes['other_tubes'] = self.annotation.get_bboxes(
+            self.cursor(), self.tube_id)
+        # show the frame and corresponding bounding boxes
+        self.label_frame.display(frame)
+        self.label_frame.update_bboxes(bboxes)
+        # update slider position
+        if self.with_slider:
+            self.slider.setValue(
+                int(self.slider.maximum() * frame.id / self.frame_cnt()))
+        # emit the frame id to the main window to update status bar
+        self.frame_updated.emit(frame.id)
+
+    @pyqtSlot(BoundingBox)
+    def set_tracker(self, bbox):
+        self.tracker = Tracker()
+        self.tracker.start_track(self.current_frame(), bbox)
+        self.annotation.set_bbox(self.tube_id, self.cursor(), bbox)
+
+    @pyqtSlot()
+    def del_tracker(self):
+        self.clear_tracker()
+        self.annotation.del_later_bboxes(self.tube_id, self.cursor())
+        self.annotation.save()
+        tube_info = self.annotation.tube(self.tube_id).to_dict(
+            with_id=True, with_bbox=False)
+        self.tube_annotated.emit(tube_info)
+        self.reset_tube_id()
+
+    @pyqtSlot()
+    def on_slider_released(self):
+        progress = self.slider.value() / self.slider.maximum()
+        frame_id = int(round(self.frame_cnt() * progress))
+        self.jump_to_frame(frame_id)
+
+    @pyqtSlot(int)
+    def jump_to_tube(self, tube_id):
+        self.tube_id = tube_id
+        self.jump_to_frame(self.annotation.tube_start(tube_id))
+
+    @pyqtSlot(str)
+    def update_bbox_label(self, label):
+        self.label_frame.update_bbox_label(label)
 
     @pyqtSlot()
     def open_file(self):
@@ -100,44 +213,24 @@ class VideoWidget(QWidget):
         if self.with_slider:
             self.slider.setEnabled(True)
         self.video.load(self.filename)
+        self.annotation.load(self.filename + '.annotation')
+        self.annotation_loaded.emit(self.annotation.get_brief_info())
         self.jump_to_frame(1)
-        self.signal_annotation_loaded.emit(
-            self.video.annotation.get_brief_info())
-
-    @pyqtSlot(VideoFrame, dict)
-    def update_frame(self, frame, bboxes):
-        self.label_frame.show_img(frame)
-        self.label_frame.update_bboxes(bboxes)
-        frame_id = frame.id
-        frame_num = self.video.frame_num
-        if self.with_slider:
-            self.slider.setValue(
-                int(self.slider.maximum() * frame_id / frame_num))
-
-    @pyqtSlot()
-    def on_slider_released(self):
-        progress = self.slider.value() / self.slider.maximum()
-        cursor = int(self.video.frame_num * progress)
-        self.jump_to_frame(cursor)
-
-    @pyqtSlot(int)
-    def jump_to_frame(self, cursor):
-        self.label_frame.clear_bboxes()
-        self.video.jump_to_frame(cursor)
-
-    @pyqtSlot(int)
-    def jump_to_tube(self, tube_id):
-        self.video.jump_to_tube(tube_id)
-
-    @pyqtSlot()
-    def save_annotations(self):
-        self.video.annotation.save()
 
     @pyqtSlot()
     def export_video(self):
         filename, _ = QFileDialog.getSaveFileName(
             self, 'Export video', './', 'Videos (*.avi)')
         t = threading.Thread(target=self.video.export,
-                             kwargs=dict(filename=filename))
+                             kwargs=dict(out_file=filename,
+                                         annotation=self.annotation))
         t.daemon = True
         t.start()
+
+    @pyqtSlot(int)
+    def update_export_progress(self, progress):
+        self.export_progress_updated.emit(progress)
+
+    @pyqtSlot()
+    def save_annotation(self):
+        self.annotation.save()

@@ -18,21 +18,20 @@ class MainWindow(QMainWindow):
         self.init_ui()
         # menu actions
         self.action_open.triggered.connect(self.video_widget.open_file)
-        self.action_save.triggered.connect(self.video_widget.save_annotations)
+        self.action_save.triggered.connect(self.video_widget.save_annotation)
         self.action_export.triggered.connect(self.video_widget.export_video)
         # video widget signals
-        self.video_widget.signal_annotation_loaded.connect(
-            self.annotation_widget.show_annotations)
-        self.video_widget.video.signal_frame_updated.connect(
-            self.update_frame_idx)
-        self.video_widget.video.signal_tube_annotated.connect(
-            self.annotation_widget.show_annotations)
-        self.video_widget.video.signal_export_progress.connect(
+        self.video_widget.annotation_loaded.connect(
+            self.annotation_widget.show_tubes)
+        self.video_widget.frame_updated.connect(self.update_frame_id)
+        self.video_widget.tube_annotated.connect(
+            self.annotation_widget.add_tube)
+        self.video_widget.export_progress_updated.connect(
             self.update_export_progress)
         # annotation widget signals
         self.annotation_widget.combobox_word.currentTextChanged.connect(
-            self.video_widget.label_frame.update_bbox_label)
-        self.annotation_widget.signal_tube_selected.connect(
+            self.video_widget.update_bbox_label)
+        self.annotation_widget.tube_selected.connect(
             self.video_widget.jump_to_tube)
         # show the window
         self.show()
@@ -83,10 +82,9 @@ class MainWindow(QMainWindow):
         statusbar.addWidget(self.label_frame_idx)
         statusbar.addPermanentWidget(self.progressbar_export)
 
-    @pyqtSlot(VideoFrame, dict)
-    def update_frame_idx(self, frame, bboxes):
-        frame_id = frame.id
-        total_num = self.video_widget.video.frame_num
+    @pyqtSlot(int)
+    def update_frame_id(self, frame_id):
+        total_num = self.video_widget.frame_cnt()
         self.label_frame_idx.setText(' Frame {}/{}'.format(frame_id, total_num))
 
     @pyqtSlot(int)

@@ -6,8 +6,8 @@ from bbox import BoundingBox
 
 
 class ImageLabel(QLabel):
-    signal_bbox_added = pyqtSignal(BoundingBox)
-    signal_bbox_deleted = pyqtSignal()
+    bbox_added = pyqtSignal(BoundingBox)
+    bbox_deleted = pyqtSignal()
 
     def __init__(self, *args):
         super(ImageLabel, self).__init__(*args)
@@ -24,6 +24,9 @@ class ImageLabel(QLabel):
 
     def clear_bboxes(self):
         self.bboxes = dict(current_tube=None, other_tubes=[])
+
+    def update_bbox_label(self, label):
+        self.bbox_label = label
 
     def pt2rect(self, pt1, pt2):
         left = min(pt1.x(), pt2.x())
@@ -81,14 +84,14 @@ class ImageLabel(QLabel):
                 if rect.width() > 5 and rect.height() > 5:
                     bbox = BoundingBox(self.bbox_label, rect=rect)
                     self.bboxes['current_tube'] = bbox
-                    self.signal_bbox_added.emit(self.proj_to_real_img(bbox))
+                    self.bbox_added.emit(self.proj_to_real_img(bbox))
             self.update()
         elif event.button() == Qt.RightButton:
             if not self.mouse_down:
                 bbox = self.bboxes['current_tube']
                 if bbox is not None and bbox.contains(event.pos()):
                     self.bboxes['current_tube'] = None
-                    self.signal_bbox_deleted.emit()
+                    self.bbox_deleted.emit()
                 self.update()
         self.mouse_down = False
 
@@ -111,7 +114,7 @@ class ImageLabel(QLabel):
             self.show_reticle = not self.show_reticle
         self.update()
 
-    def show_img(self, pixmap):
+    def display(self, pixmap):
         self.scale_ratio = max(pixmap.width() / self.width(),
                                pixmap.height() / self.height())
         scaled_pixmap = pixmap.scaled(self.width() - 2, self.height() - 2,
@@ -122,7 +125,6 @@ class ImageLabel(QLabel):
         self.setPixmap(scaled_pixmap)
         self.update()
 
-    @pyqtSlot(list)
     def update_bboxes(self, bboxes):
         self.clear_bboxes()
         if bboxes['current_tube'] is not None:
@@ -131,7 +133,3 @@ class ImageLabel(QLabel):
         for bbox in bboxes['other_tubes']:
             self.bboxes['other_tubes'].append(
                 self.proj_to_image_label(bbox))
-
-    @pyqtSlot(str)
-    def update_bbox_label(self, label):
-        self.bbox_label = label

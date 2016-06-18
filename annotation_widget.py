@@ -3,10 +3,12 @@ from PyQt5.QtWidgets import *
 
 
 class AnnotationWidget(QWidget):
-    signal_tube_selected = pyqtSignal(int)
+    tube_selected = pyqtSignal(int)
 
     def __init__(self):
         super(AnnotationWidget, self).__init__()
+        # recode the position in the list widget of each tube info
+        self.tube_row = dict()
         self.init_ui()
         self.list_widget.itemDoubleClicked.connect(self.on_item_double_clicked)
         self.lineedit_word.returnPressed.connect(self.add_word)
@@ -32,8 +34,8 @@ class AnnotationWidget(QWidget):
 
     @pyqtSlot()
     def add_word(self):
-        word = self.lineedit_word.text()
-        if word.strip() == '':
+        word = self.lineedit_word.text().strip()
+        if word == '':
             return
         if self.combobox_word.findText(word) < 0:
             self.combobox_word.addItem(word)
@@ -42,27 +44,40 @@ class AnnotationWidget(QWidget):
         self.lineedit_word.setText('')
 
     @pyqtSlot(list)
-    def show_annotations(self, annotations):
+    def show_tubes(self, tubes):
         """show a list of tube info
         format: {id: label: start-end}
         """
-        for tube in annotations:
-            item_str = '{0[0]}: {0[1]}: {0[2]}-{0[3]}'.format(tube)
+        self.list_widget.clear()
+        self.tube_row = dict()
+        idx = 0
+        for tube in tubes:
+            item_str = '{id}: {label}: {start}-{end}'.format(**tube)
             self.list_widget.addItem(item_str)
+            self.tube_row[tube['id']] = idx
+            idx += 1
         self.list_widget.update()
         # add words in annotations to combobox
         unique_labels = set()
-        for tube in annotations:
-            unique_labels.add(tube[1])
+        for tube in tubes:
+            unique_labels.add(tube['label'])
         self.set_words(list(unique_labels))
 
-    # @pyqtSlot(int)
-    # def select_section(self, section_idx):
-    #     self.list_widget.setCurrentRow(section_idx)
+    @pyqtSlot(dict)
+    def add_tube(self, tube_info):
+        """add or modify the tube info to the list widget
+        """
+        item_str = '{id}: {label}: {start}-{end}'.format(**tube_info)
+        tube_id = tube_info['id']
+        if tube_id not in self.tube_row:
+            self.list_widget.addItem(item_str)
+            self.tube_row[tube_id] = self.list_widget.count() - 1
+        else:
+            self.list_widget.item(self.tube_row[tube_id]).setText(item_str)
 
     @pyqtSlot(QListWidgetItem)
     def on_item_double_clicked(self, item):
         tube_info = item.text().split(':')
         tube_id = int(tube_info[0])
         self.combobox_word.setCurrentText(tube_info[1])
-        self.signal_tube_selected.emit(tube_id)
+        self.tube_selected.emit(tube_id)

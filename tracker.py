@@ -8,15 +8,15 @@ class Tracker(dlib.correlation_tracker):
         self.label = None
         super(Tracker, self).__init__()
 
-    def start_track(self, img, bbox):
+    def start_track(self, frame, bbox):
         self.label = bbox.label
         super(Tracker, self).start_track(
-            img,
+            frame.raw_img,
             dlib.rectangle(bbox.left(), bbox.top(), bbox.right(), bbox.bottom())
         )
 
-    def update(self, img):
-        super(Tracker, self).update(img)
+    def update(self, frame):
+        super(Tracker, self).update(frame.raw_img)
         rect = super(Tracker, self).get_position()
         l = int(rect.left())
         r = int(rect.right())

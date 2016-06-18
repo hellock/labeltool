@@ -2,12 +2,10 @@
 
 import sys
 
-from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
+from PyQt5.QtWidgets import *
 
-from bbox import BoundingBox
 from annotation_widget import AnnotationWidget
-from video import VideoFrame
 from video_widget import VideoWidget
 
 

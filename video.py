@@ -4,8 +4,8 @@ from collections import OrderedDict
 from enum import Enum
 
 import cv2
+from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap
-from PyQt5.QtCore import QObject, QRect, pyqtSignal
 
 from ckutils import VideoUtil
 
@@ -165,11 +165,6 @@ class Video(QObject):
             return True
         else:
             return False
-
-    def track(self, img):
-        frame_rect = QRect(0, 0, self.width, self.height)
-        bbox = self.tracker.update(img).intersected(frame_rect)
-        return bbox
 
     def export(self, out_file, annotation, start=1, end=0):
         completed = 0

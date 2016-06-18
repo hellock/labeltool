@@ -1,7 +1,7 @@
 import os
 
-from PyQt5.QtGui import *
 from PyQt5.QtCore import *
+from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 
 from annotation import Annotation
@@ -189,7 +189,7 @@ class VideoWidget(QWidget):
     @pyqtSlot()
     def on_slider_released(self):
         progress = self.slider.value() / self.slider.maximum()
-        frame_id = int(round(self.frame_cnt() * progress))
+        frame_id = max(int(round(self.frame_cnt() * progress)), 1)
         self.jump_to_frame(frame_id)
 
     @pyqtSlot(int)

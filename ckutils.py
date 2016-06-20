@@ -26,7 +26,32 @@ def int2str(i, zero_num=0):
         return '{0:0{1}d}'.format(i, zero_num)
 
 
+def str_list(num_list):
+    return list(map(str, num_list))
+
+
+def int_list(str_list):
+    return list(map(int, str_list))
+
+
 class VideoUtil(object):
+
+    @classmethod
+    def load_video(cls, filename):
+        """load a video file
+        Return a VideoCapture object and a dict containing basic infomation
+        of the video.
+        """
+        if not os.path.isfile(filename):
+            print('video file not found.')
+            return
+        vreader = cv2.VideoCapture(filename)
+        info = dict()
+        info['width'] = int(vreader.get(cv2.CAP_PROP_FRAME_WIDTH))
+        info['height'] = int(vreader.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        info['fps'] = int(round(vreader.get(cv2.CAP_PROP_FPS)))
+        info['frame_cnt'] = int(vreader.get(cv2.CAP_PROP_FRAME_COUNT))
+        return (vreader, info)
 
     @classmethod
     def check_pos(cls, vreader, pos):
@@ -101,3 +126,69 @@ class VideoUtil(object):
             vwriter.write(img)
             idx += 1
         vwriter.release()
+
+
+class Rect(object):
+
+    @classmethod
+    def from_points(pt1, pt2):
+        x = min(pt1[0], pt2[0])
+        y = min(pt1[1], pt2[1])
+        w = abs(pt1[0] - pt2[0]) + 1
+        h = abs(pt1[1] - pt2[1]) + 1
+        return Rect(x, y, w, h)
+
+    @classmethod
+    def from_qrect(cls, qrect):
+        return cls(qrect.x(), qrect.y(), qrect.width(), qrect.height())
+
+    def __init__(self, x, y, w, h, type='xywh'):
+        self._x = x
+        self._y = y
+        if type == 'xywh':
+            self._w = w
+            self._h = h
+        elif type == 'ltrb':
+            self._w = w - x + 1
+            self._h = h - y + 1
+
+    def __iter__(self):
+        for val in (self._x, self._y, self._w, self.h):
+            yield val
+
+    @property
+    def x(self):
+        return self._x
+
+    @property
+    def y(self):
+        return self._y
+
+    @property
+    def w(self):
+        return self._w
+
+    @property
+    def h(self):
+        return self._h
+
+    @property
+    def right(self):
+        return self._x + self._w - 1
+
+    @property
+    def bottom(self):
+        return self._y + self._h - 1
+
+    def copy(self):
+        return Rect(*list(self))
+
+    def scale(self, ratio):
+        self._x *= ratio
+        self._y *= ratio
+        self._w *= ratio
+        self._h *= ratio
+
+    def shift(self, dx, dy):
+        self._x += dx
+        self._y += dy

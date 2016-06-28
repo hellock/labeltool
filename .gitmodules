@@ -1,0 +1,3 @@
+[submodule "ckutils"]
+	path = ckutils
+	url = git@github.com:hellock/ckutils.git

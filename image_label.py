@@ -29,24 +29,25 @@ class ImageLabel(QLabel):
         self.bbox_label = label
 
     def pt2rect(self, pt1, pt2):
-        left = min(pt1.x(), pt2.x())
-        top = min(pt1.y(), pt2.y())
-        right = max(pt1.x(), pt2.x())
-        bottom = max(pt1.y(), pt2.y())
-        return QRect(left, top, right - left, bottom - top)
+        left = int(min(pt1.x(), pt2.x()))
+        top = int(min(pt1.y(), pt2.y()))
+        right = int(max(pt1.x(), pt2.x()))
+        bottom = int(max(pt1.y(), pt2.y()))
+        return QRect(left, top, right - left + 1, bottom - top + 1)
 
     def proj_to_real_img(self, bbox):
-        roi_bbox = bbox.intersected(self.img_region).translated(
-            -self.img_region.topLeft())
-        return roi_bbox.scaled(self.scale_ratio)
+        roi_bbox = bbox.intersected(self.img_region)
+        roi_bbox.shift(-self.img_region.x, -self.img_region.y)
+        roi_bbox.scale(self.scale_ratio)
+        return roi_bbox
 
     def proj_to_image_label(self, bbox):
-        return bbox.scaled(1 / self.scale_ratio).translated(
-            self.img_region.topLeft())
+        return bbox.scaled(1 / self.scale_ratio).shifted(
+            self.img_region.x, self.img_region.y)
 
     def draw_bbox(self, painter, bbox):
-        painter.drawRect(bbox)
-        painter.drawText(QPoint(bbox.x(), bbox.y() - 3), bbox.label)
+        painter.drawRect(bbox.to_qrect())
+        painter.drawText(QPoint(bbox.x, bbox.y - 3), bbox.label)
 
     def draw_reticle(self, painter, point):
         painter.drawLine(0, point.y(), self.width(), point.y())
@@ -82,14 +83,15 @@ class ImageLabel(QLabel):
                 self.end_pt = event.pos()
                 rect = self.pt2rect(self.start_pt, self.end_pt)
                 if rect.width() > 5 and rect.height() > 5:
-                    bbox = BoundingBox(self.bbox_label, rect=rect)
+                    bbox = BoundingBox.from_qrect(rect, self.bbox_label, 1)
                     self.bboxes['current_tube'] = bbox
                     self.bbox_added.emit(self.proj_to_real_img(bbox))
             self.update()
         elif event.button() == Qt.RightButton:
             if not self.mouse_down:
                 bbox = self.bboxes['current_tube']
-                if bbox is not None and bbox.contains(event.pos()):
+                if (bbox is not None and
+                        bbox.contain(event.pos().x(), event.pos().y())):
                     self.bboxes['current_tube'] = None
                     self.bbox_deleted.emit()
                 self.update()
@@ -121,7 +123,8 @@ class ImageLabel(QLabel):
                                       Qt.KeepAspectRatio)
         x = int((self.width() - scaled_pixmap.width()) / 2)
         y = int((self.height() - scaled_pixmap.height()) / 2)
-        self.img_region = QRect(QPoint(x, y), scaled_pixmap.size())
+        self.img_region = BoundingBox.from_qrect(
+            QRect(QPoint(x, y), scaled_pixmap.size()))
         self.setPixmap(scaled_pixmap)
         self.update()
 

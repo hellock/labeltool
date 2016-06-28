@@ -7,7 +7,7 @@ import cv2
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap
 
-from ckutils import VideoUtil
+from ckutils.video import VideoReader
 
 
 class VideoStatus(Enum):
@@ -36,22 +36,22 @@ class VideoFrame(QPixmap):
         return qimage
 
 
-class VideoBuffer(object):
+class VideoCache(object):
 
     def __init__(self, max_size):
-        self.buf = OrderedDict()
+        self.cache = OrderedDict()
         self.max_size = max_size
 
     def put(self, frame_id, img):
-        if frame_id in self.buf:
+        if frame_id in self.cache:
             return
-        if len(self.buf) >= self.max_size:
-            self.buf.popitem(last=False)
-        self.buf[frame_id] = img
+        if len(self.cache) >= self.max_size:
+            self.cache.popitem(last=False)
+        self.cache[frame_id] = img
 
     def get(self, frame_id):
-        if frame_id in self.buf:
-            return self.buf[frame_id]
+        if frame_id in self.cache:
+            return self.cache[frame_id]
         else:
             return None
 
@@ -64,7 +64,7 @@ class Video(QObject):
     def __init__(self, filename=None, max_buf_size=500, max_fps=0):
         super(Video, self).__init__()
         self.vreader = None
-        self.video_buffer = VideoBuffer(max_buf_size)
+        self.video_cache = VideoCache(max_buf_size)
         self.status = VideoStatus.not_loaded
         self.cursor = 0
         self.max_fps = max_fps
@@ -74,31 +74,33 @@ class Video(QObject):
 
     def load(self, filename):
         self.filename = filename
-        self.vreader = cv2.VideoCapture(filename)
+        self.vreader = VideoReader(filename)
         self.status = VideoStatus.pause
-        self.width = int(self.vreader.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.height = int(self.vreader.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.fps = int(round(self.vreader.get(cv2.CAP_PROP_FPS)))
-        self.frame_cnt = int(self.vreader.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.width = self.vreader.width
+        self.height = self.vreader.height
+        self.fps = self.vreader.fps
+        self.frame_cnt = self.vreader.frame_cnt
 
     def get_frame(self, frame_id=0):
         """get a frame by frame_id
         frame_id = 0 means the next frame
         """
-        self.cursor = frame_id
-        img = self.video_buffer.get(self.cursor)
+        if frame_id == 0:
+            self.cursor += 1
+        else:
+            self.cursor = frame_id
+        img = self.video_cache.get(self.cursor)
         if img is None:
             if frame_id > 0:
-                self.vreader.set(cv2.CAP_PROP_POS_FRAMES, frame_id - 1)
-                VideoUtil.check_pos(self.vreader, frame_id - 1)
+                self.vreader.goto_frame(frame_id - 1)
             ret, img = self.vreader.read()
             if ret == 0:
                 return None
-            self.video_buffer.put(self.cursor, img)
+            self.video_cache.put(self.cursor, img)
         return VideoFrame(img, self.cursor)
 
     def current_frame(self):
-        img = self.video_buffer.get(self.cursor)
+        img = self.video_cache.get(self.cursor)
         return VideoFrame(img, self.cursor)
 
     def frame_forward(self):
@@ -107,7 +109,7 @@ class Video(QObject):
             return
         if self.status != VideoStatus.play_forward:
             self.status = VideoStatus.frame_forward
-        return self.get_frame(self.cursor + 1)
+        return self.get_frame()
 
     def frame_backward(self):
         if self.cursor <= 1:
@@ -171,21 +173,19 @@ class Video(QObject):
         end = self.frame_cnt if end == 0 else end
         export_num = end - start + 1
         line_thickness = int(min(self.width, self.height) / 200)
-        vreader = cv2.VideoCapture(self.filename)
-        vreader.set(cv2.CAP_PROP_POS_FRAMES, start - 1)
-        VideoUtil.check_pos(start - 1)
+        vreader = VideoReader(self.filename)
+        vreader.goto_frame(start - 1)
         vwriter = cv2.VideoWriter(out_file, cv2.VideoWriter_fourcc(*'XVID'),
                                   self.fps, (self.width, self.height))
-        while vreader.isOpened() and completed < export_num:
+        while completed < export_num:
             ret, img = vreader.read()
             if ret == 0:
                 break
             bboxes = annotation.get_bboxes(completed + start)
             for bbox in bboxes:
-                cv2.rectangle(img, (bbox.left(), bbox.top()),
-                              (bbox.right(), bbox.bottom()), (0, 0, 255),
-                              line_thickness)
-                cv2.putText(img, bbox.label, (bbox.x(), bbox.y()),
+                cv2.rectangle(img, bbox.left_top, bbox.right_bottom,
+                              (0, 0, 255), line_thickness)
+                cv2.putText(img, bbox.label, bbox.left_top,
                             cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255),
                             line_thickness)
             vwriter.write(img)

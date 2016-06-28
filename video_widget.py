@@ -143,8 +143,10 @@ class VideoWidget(QWidget):
         self.tube_id = 0
 
     def track(self, frame):
-        frame_rect = QRect(0, 0, self.video.width, self.video.height)
-        bbox = self.tracker.update(frame).intersected(frame_rect)
+        frame_rect = BoundingBox(None, 0, 0, 0,
+                                 self.video.width, self.video.height)
+        bbox, score = self.tracker.update(frame)
+        bbox = bbox.intersected(frame_rect)
         return bbox
 
     @pyqtSlot(VideoFrame)
@@ -181,8 +183,7 @@ class VideoWidget(QWidget):
         self.clear_tracker()
         self.annotation.del_later_bboxes(self.tube_id, self.cursor())
         self.annotation.save()
-        tube_info = self.annotation.tube(self.tube_id).to_dict(
-            with_id=True, with_bbox=False)
+        tube_info = self.annotation.tube(self.tube_id).to_dict(with_bbox=False)
         self.tube_annotated.emit(tube_info)
         self.reset_tube_id()
 

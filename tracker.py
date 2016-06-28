@@ -13,14 +13,14 @@ class Tracker(dlib.correlation_tracker):
         self.label = bbox.label
         super(Tracker, self).start_track(
             frame.raw_img,
-            dlib.rectangle(bbox.left(), bbox.top(), bbox.right(), bbox.bottom())
+            dlib.rectangle(bbox.left, bbox.top, bbox.right, bbox.bottom)
         )
 
     def update(self, frame):
-        super(Tracker, self).update(frame.raw_img)
+        score = super(Tracker, self).update(frame.raw_img)
         rect = super(Tracker, self).get_position()
         l = int(rect.left())
         r = int(rect.right())
         t = int(rect.top())
         b = int(rect.bottom())
-        return BoundingBox(self.label, l, t, r - l, b - t)
+        return (BoundingBox(self.label, 0, l, t, r - l, b - t), score)

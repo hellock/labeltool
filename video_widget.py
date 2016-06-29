@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import *
 
 from annotation import Annotation
 from bbox import BoundingBox
+from ckutils.cv import *
 from image_label import ImageLabel
 from tracker import Tracker
 from video import *
@@ -75,7 +76,7 @@ class VideoWidget(QWidget):
                 self.frame_backward()
                 return True
             elif key == Qt.Key_S:
-                # self.annotation.save()
+                self.last_keyframe = self.cursor()
                 self.new_tube()
                 return True
             elif key == Qt.Key_Left:
@@ -96,8 +97,23 @@ class VideoWidget(QWidget):
         return False
 
     def frame_forward(self):
-        frame = self.video.frame_forward()
-        self.update_frame(frame)
+        if self.tracker is not None:
+            ori_hist = color_hist(self.tracker.init_region, 16)
+            if self.cursor() >= self.annotation.tube_end(self.tube_id):
+                self.last_keyframe = self.cursor()
+        cnt = 0
+        while cnt < 10:
+            frame = self.video.frame_forward()
+            self.update_frame(frame)
+            if (self.tracker is None or
+                    self.cursor() < self.annotation.tube_end(self.tube_id)):
+                break
+            bbox = self.tracker.bbox
+            hist = color_hist(
+                frame.raw_img[bbox.left: bbox.right, bbox.top: bbox.bottom], 16)
+            if compare_hist(hist, ori_hist) < 0.9:
+                break
+            cnt += 1
 
     def frame_backward(self):
         frame = self.video.frame_backward()
@@ -149,11 +165,16 @@ class VideoWidget(QWidget):
         bbox = bbox.intersected(frame_rect)
         return bbox
 
+    def adjust_track_bboxes(self, bbox):
+        self.annotation.interpolate(self.tube_id, bbox, self.last_keyframe,
+                                    self.cursor())
+
     @pyqtSlot(VideoFrame)
     def update_frame(self, frame):
         # get bounding boxes of current tube and other tubes
         bboxes = dict()
-        if self.tracker is not None and self.video.is_forward():
+        if (self.tracker is not None and self.video.is_forward() and
+                self.cursor() > self.annotation.tube_end(self.tube_id)):
             bboxes['current_tube'] = self.track(frame)
             self.annotation.set_bbox(self.tube_id, self.cursor(),
                                      bboxes['current_tube'])
@@ -174,6 +195,8 @@ class VideoWidget(QWidget):
 
     @pyqtSlot(BoundingBox)
     def set_tracker(self, bbox):
+        if self.tracker is not None and self.cursor() > self.last_keyframe + 1:
+            self.adjust_track_bboxes(bbox)
         self.tracker = Tracker()
         self.tracker.start_track(self.current_frame(), bbox)
         self.annotation.set_bbox(self.tube_id, self.cursor(), bbox)
@@ -183,7 +206,7 @@ class VideoWidget(QWidget):
         self.clear_tracker()
         self.annotation.del_later_bboxes(self.tube_id, self.cursor())
         self.annotation.save()
-        tube_info = self.annotation.tube(self.tube_id).to_dict(with_bbox=False)
+        tube_info = self.annotation.tube(self.tube_id).to_dict(with_bboxes=False)
         self.tube_annotated.emit(tube_info)
         self.reset_tube_id()
 

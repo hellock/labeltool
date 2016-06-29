@@ -42,8 +42,9 @@ class ImageLabel(QLabel):
         return roi_bbox
 
     def proj_to_image_label(self, bbox):
-        return bbox.scaled(1 / self.scale_ratio).shifted(
-            self.img_region.x, self.img_region.y)
+        show_bbox = bbox.scaled(1 / self.scale_ratio)
+        show_bbox.shift(self.img_region.x, self.img_region.y)
+        return show_bbox
 
     def draw_bbox(self, painter, bbox):
         painter.drawRect(bbox.to_qrect())

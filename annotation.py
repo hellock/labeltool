@@ -48,6 +48,24 @@ class Tube(object):
         else:
             return None
 
+    def interpolate(self, bbox, from_frame, to_frame):
+        cnt = to_frame - from_frame
+        if cnt <= 1:
+            return
+        from_bbox = self.bboxes[from_frame - self._start]
+        step_x = (bbox.x - from_bbox.x) / cnt
+        step_y = (bbox.y - from_bbox.y) / cnt
+        step_w = (bbox.w - from_bbox.w) / cnt
+        step_h = (bbox.h - from_bbox.h) / cnt
+        bbox = self.bboxes[from_frame - self._start]
+        for i in range(1, cnt):
+            self.bboxes[from_frame - self._start + i].set(
+                int(round(bbox.x + step_x * i)),
+                int(round(bbox.y + step_y * i)),
+                int(round(bbox.w + step_w * i)),
+                int(round(bbox.h + step_h * i)))
+            print(list(self.bboxes[from_frame - self._start + i]))
+
     def del_later_bboxes(self, frame_id):
         for i in range(self._start + len(self.bboxes) - frame_id):
             self.bboxes.pop()
@@ -122,6 +140,9 @@ class Annotation(object):
 
     def set_bbox(self, tube_id, frame_id, bbox):
         self.tubes[tube_id].set_bbox(frame_id, bbox)
+
+    def interpolate(self, tube_id, bbox, from_frame, to_frame):
+        self.tubes[tube_id].interpolate(bbox, from_frame, to_frame)
 
     def del_later_bboxes(self, tube_id, frame_id):
         self.tubes[tube_id].del_later_bboxes(frame_id)

@@ -28,6 +28,7 @@ class VideoWidget(QWidget):
         self.annotation = Annotation()
         self.tube_id = 0
         self.tracker = None
+        self.sim_thr = 0.9
         self.init_ui()
         self.installEventFilter(self)
         if self.with_slider:
@@ -111,7 +112,7 @@ class VideoWidget(QWidget):
             bbox = self.tracker.bbox
             hist = color_hist(
                 frame.raw_img[bbox.left: bbox.right, bbox.top: bbox.bottom], 16)
-            if compare_hist(hist, ori_hist) < 0.9:
+            if compare_hist(hist, ori_hist) < self.sim_thr:
                 break
             cnt += 1
 

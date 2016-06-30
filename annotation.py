@@ -64,7 +64,6 @@ class Tube(object):
                 int(round(bbox.y + step_y * i)),
                 int(round(bbox.w + step_w * i)),
                 int(round(bbox.h + step_h * i)))
-            print(list(self.bboxes[from_frame - self._start + i]))
 
     def del_later_bboxes(self, frame_id):
         for i in range(self._start + len(self.bboxes) - frame_id):

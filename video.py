@@ -36,45 +36,28 @@ class VideoFrame(QPixmap):
         return qimage
 
 
-class VideoCache(object):
-
-    def __init__(self, max_size):
-        self.cache = OrderedDict()
-        self.max_size = max_size
-
-    def put(self, frame_id, img):
-        if frame_id in self.cache:
-            return
-        if len(self.cache) >= self.max_size:
-            self.cache.popitem(last=False)
-        self.cache[frame_id] = img
-
-    def get(self, frame_id):
-        if frame_id in self.cache:
-            return self.cache[frame_id]
-        else:
-            return None
-
-
 class Video(QObject):
 
     frame_updated = pyqtSignal(VideoFrame)
     export_progress_updated = pyqtSignal(int)
 
-    def __init__(self, filename=None, max_buf_size=500, max_fps=0):
+    def __init__(self, filename=None, cache_capacity=500, max_fps=0):
         super(Video, self).__init__()
         self.vreader = None
-        self.video_cache = VideoCache(max_buf_size)
+        self.cache_capacity = cache_capacity
         self.status = VideoStatus.not_loaded
-        self.cursor = 0
         self.max_fps = max_fps
         self.filename = filename
         if filename is not None:
             self.load(filename)
 
+    @property
+    def cursor(self):
+        return self.vreader.position
+
     def load(self, filename):
         self.filename = filename
-        self.vreader = VideoReader(filename)
+        self.vreader = VideoReader(filename, self.cache_capacity)
         self.status = VideoStatus.pause
         self.width = self.vreader.width
         self.height = self.vreader.height
@@ -86,21 +69,16 @@ class Video(QObject):
         frame_id = 0 means the next frame
         """
         if frame_id == 0:
-            self.cursor += 1
-        else:
-            self.cursor = frame_id
-        img = self.video_cache.get(self.cursor)
-        if img is None:
-            if frame_id > 0:
-                self.vreader.goto_frame(frame_id - 1)
             ret, img = self.vreader.read()
-            if ret == 0:
-                return None
-            self.video_cache.put(self.cursor, img)
-        return VideoFrame(img, self.cursor)
+        else:
+            ret, img = self.vreader.get_frame(frame_id)
+        if ret:
+            return VideoFrame(img, self.cursor)
+        else:
+            return None
 
     def current_frame(self):
-        img = self.video_cache.get(self.cursor)
+        img = self.vreader.current_frame()
         return VideoFrame(img, self.cursor)
 
     def frame_forward(self):

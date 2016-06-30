@@ -20,11 +20,11 @@ class VideoWidget(QWidget):
     export_progress_updated = pyqtSignal(int)
 
     def __init__(self, parent=None, with_filename=True, with_slider=True,
-                 max_buf_size=500, max_fps=0):
+                 cache_capacity=500, max_fps=0):
         super(VideoWidget, self).__init__(parent)
         self.with_filename = with_filename
         self.with_slider = with_slider
-        self.video = Video(max_buf_size=max_buf_size, max_fps=max_fps)
+        self.video = Video(cache_capacity=cache_capacity, max_fps=max_fps)
         self.annotation = Annotation()
         self.tube_id = 0
         self.tracker = None

@@ -19,6 +19,7 @@ class ImageLabel(QLabel):
         self.mouse_down = False
         self.show_reticle = False
         self.bbox_label = None
+        self.is_new_tube = False
         self.clear_bboxes()
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
@@ -95,9 +96,11 @@ class ImageLabel(QLabel):
                 self.end_pt = event.pos()
                 rect = self.pt2rect(self.start_pt, self.end_pt)
                 if rect.width() > 5 and rect.height() > 5:
-                    if self.bboxes['current_tube'] is not None:
-                        self.bboxes['other_tubes'].append(
-                            self.bboxes['current_tube'])
+                    if self.is_new_tube:
+                        if self.bboxes['current_tube'] is not None:
+                            self.bboxes['other_tubes'].append(
+                                self.bboxes['current_tube'])
+                        self.is_new_tube = False
                     bbox = BoundingBox.from_qrect(rect, self.bbox_label, 1)
                     self.bboxes['current_tube'] = bbox
                     self.bbox_added.emit(self.proj_to_real_img(bbox))

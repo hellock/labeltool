@@ -151,9 +151,9 @@ class VideoWidget(QWidget):
         if label is not None:
             self.tube_id = self.annotation.next_tube_id
             self.annotation.add_tube(label, self.cursor())
-            print(self.tube_id)
             self.label_frame.flash_reticle()
             self.label_frame.toggle_reticle(True)
+            self.label_frame.is_new_tube = True
 
     def clear_tracker(self):
         self.tracker = None

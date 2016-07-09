@@ -141,7 +141,6 @@ class Annotation(object):
         del self.tubes[tube_id]
 
     def set_bbox(self, tube_id, frame_id, bbox):
-        print('set_bbox', tube_id, frame_id, list(bbox))
         self.tubes[tube_id].set_bbox(frame_id, bbox)
 
     def interpolate(self, tube_id, bbox, from_frame, to_frame):

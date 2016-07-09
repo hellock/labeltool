@@ -1,9 +1,10 @@
-from PyQt5.QtCore import pyqtSignal, pyqtSlot
+from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt
 from PyQt5.QtWidgets import *
 
 
 class AnnotationWidget(QWidget):
     tube_selected = pyqtSignal(int)
+    tube_deleted = pyqtSignal(int)
 
     def __init__(self):
         super(AnnotationWidget, self).__init__()
@@ -11,6 +12,8 @@ class AnnotationWidget(QWidget):
         self.tube_row = dict()
         self.init_ui()
         self.list_widget.itemDoubleClicked.connect(self.on_item_double_clicked)
+        self.list_widget.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.list_widget.customContextMenuRequested.connect(self.pop_menu)
         self.lineedit_word.returnPressed.connect(self.add_word)
 
     def init_ui(self):
@@ -24,6 +27,17 @@ class AnnotationWidget(QWidget):
         self.vbox_layout.addWidget(self.list_widget, 8)
         self.vbox_layout.addLayout(self.hbox_layout, 1)
         self.setLayout(self.vbox_layout)
+
+    def pop_menu(self, pos):
+        menu = QMenu()
+        action_delete = menu.addAction('Delete')
+        action = menu.exec_(self.list_widget.mapToGlobal(pos))
+        if action == action_delete:
+            item = self.list_widget.currentItem()
+            self.list_widget.takeItem(self.list_widget.currentRow())
+            tube_info = item.text().split(':')
+            tube_id = int(tube_info[0])
+            self.tube_deleted.emit(tube_id)
 
     def set_words(self, words):
         self.combobox_word.clear()

@@ -46,7 +46,7 @@ class VideoWidget(QWidget):
         if self.with_slider:
             self.init_slider()
         self.setLayout(self.vbox_layout)
-        self.setFocusPolicy(Qt.StrongFocus)
+        # self.setFocusPolicy(Qt.StrongFocus)
 
     def init_label_filename(self):
         self.label_filename = QLabel('filename')
@@ -221,6 +221,13 @@ class VideoWidget(QWidget):
     def jump_to_tube(self, tube_id):
         self.tube_id = tube_id
         self.jump_to_frame(self.annotation.tube_start(tube_id))
+
+    @pyqtSlot(int)
+    def del_tube(self, tube_id):
+        if self.tube_id == tube_id:
+            self.tube_id = 0
+        self.annotation.del_tube(tube_id)
+        self.annotation.save()
 
     @pyqtSlot(str)
     def update_bbox_label(self, label):

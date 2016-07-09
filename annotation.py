@@ -137,6 +137,9 @@ class Annotation(object):
         self.tubes[self.next_tube_id] = Tube(self.next_tube_id, label, start)
         self.next_tube_id += 1
 
+    def del_tube(self, tube_id):
+        del self.tubes[tube_id]
+
     def set_bbox(self, tube_id, frame_id, bbox):
         self.tubes[tube_id].set_bbox(frame_id, bbox)
 

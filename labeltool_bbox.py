@@ -31,6 +31,8 @@ class MainWindow(QMainWindow):
             self.video_widget.update_bbox_label)
         self.annotation_widget.tube_selected.connect(
             self.video_widget.jump_to_tube)
+        self.annotation_widget.tube_deleted.connect(
+            self.video_widget.del_tube)
         # show the window
         self.show()
 

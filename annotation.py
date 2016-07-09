@@ -6,12 +6,12 @@ from bbox import BoundingBox
 
 class Tube(object):
 
-    def __init__(self, id, label, start, end=None, bboxes=[]):
+    def __init__(self, id, label, start, end=None, bboxes=None):
         self._id = id
         self._label = label
         self._start = start
         self._end = start if end is None else end
-        self.bboxes = bboxes
+        self.bboxes = bboxes if bboxes is not None else []
 
     @property
     def id(self):
@@ -141,6 +141,7 @@ class Annotation(object):
         del self.tubes[tube_id]
 
     def set_bbox(self, tube_id, frame_id, bbox):
+        print('set_bbox', tube_id, frame_id, list(bbox))
         self.tubes[tube_id].set_bbox(frame_id, bbox)
 
     def interpolate(self, tube_id, bbox, from_frame, to_frame):

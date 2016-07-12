@@ -56,6 +56,7 @@ class ImageLabel(QLabel):
     def draw_reticle(self, painter, point):
         painter.drawLine(0, point.y(), self.width(), point.y())
         painter.drawLine(point.x(), 0, point.x(), self.height())
+        painter.drawText(point + QPoint(10, -3), self.bbox_label)
 
     def flash_reticle(self):
         for i in range(4):

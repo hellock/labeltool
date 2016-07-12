@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import *
 class AnnotationWidget(QWidget):
     tube_selected = pyqtSignal(int)
     tube_deleted = pyqtSignal(int)
+    tube_label_renamed = pyqtSignal(int, str)
 
     def __init__(self):
         super(AnnotationWidget, self).__init__()
@@ -12,6 +13,7 @@ class AnnotationWidget(QWidget):
         self.tube_row = dict()
         self.init_ui()
         self.list_widget.itemDoubleClicked.connect(self.on_item_double_clicked)
+        self.list_widget.itemChanged.connect(self.rename_label)
         self.list_widget.setContextMenuPolicy(Qt.CustomContextMenu)
         self.list_widget.customContextMenuRequested.connect(self.pop_menu)
         self.lineedit_word.returnPressed.connect(self.add_word)
@@ -31,6 +33,7 @@ class AnnotationWidget(QWidget):
     def pop_menu(self, pos):
         menu = QMenu()
         action_delete = menu.addAction('Delete')
+        action_edit = menu.addAction('Edit')
         action = menu.exec_(self.list_widget.mapToGlobal(pos))
         if action == action_delete:
             item = self.list_widget.currentItem()
@@ -38,6 +41,21 @@ class AnnotationWidget(QWidget):
             tube_info = item.text().split(':')
             tube_id = int(tube_info[0])
             self.tube_deleted.emit(tube_id)
+        elif action == action_edit:
+            item = self.list_widget.currentItem()
+            self.old_item_text = item.text()
+            item.setFlags(item.flags() | Qt.ItemIsEditable)
+            self.list_widget.editItem(item)
+            item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+    def parse_info(self, text):
+        tube_info = text.split(':')
+        tube_id = int(tube_info[0].strip())
+        label = tube_info[1].strip()
+        frame_range = tube_info[2].strip().split('-')
+        start = int(frame_range[0])
+        end = int(frame_range[1])
+        return (tube_id, label, start, end)
 
     def set_words(self, words):
         self.combobox_word.clear()
@@ -56,6 +74,24 @@ class AnnotationWidget(QWidget):
         self.combobox_word.setCurrentText(word)
         self.combobox_word.currentTextChanged.emit(word)
         self.lineedit_word.setText('')
+
+    @pyqtSlot(QListWidgetItem)
+    def rename_label(self, item):
+        if item.text() == self.old_item_text:
+            return
+        (old_tube_id, old_label, old_start, old_end) = self.parse_info(
+            self.old_item_text)
+        (tube_id, label, start, end) = self.parse_info(item.text())
+        if (old_tube_id == tube_id and old_label != label and
+                old_start == start and old_end == end and label != ''):
+            self.tube_label_renamed.emit(tube_id, label)
+            self.combobox_word.setCurrentText(label)
+            if self.combobox_word.findText(label) < 0:
+                self.combobox_word.addItem(label)
+            self.combobox_word.setCurrentText(label)
+            self.combobox_word.currentTextChanged.emit(label)
+        else:
+            item.setText(self.old_item_text)
 
     @pyqtSlot(list)
     def show_tubes(self, tubes):
@@ -91,7 +127,6 @@ class AnnotationWidget(QWidget):
 
     @pyqtSlot(QListWidgetItem)
     def on_item_double_clicked(self, item):
-        tube_info = item.text().split(':')
-        tube_id = int(tube_info[0])
-        self.combobox_word.setCurrentText(tube_info[1])
+        (tube_id, label, start, end) = self.parse_info(item.text())
+        self.combobox_word.setCurrentText(label)
         self.tube_selected.emit(tube_id)

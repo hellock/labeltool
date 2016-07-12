@@ -33,6 +33,8 @@ class MainWindow(QMainWindow):
             self.video_widget.jump_to_tube)
         self.annotation_widget.tube_deleted.connect(
             self.video_widget.del_tube)
+        self.annotation_widget.tube_label_renamed.connect(
+            self.video_widget.change_tube_label)
         # show the window
         self.show()
 

@@ -21,6 +21,11 @@ class Tube(object):
     def label(self):
         return self._label
 
+    @label.setter
+    def label(self, label):
+        if label:
+            self._label = label
+
     @property
     def start(self):
         return self._start

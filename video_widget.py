@@ -231,6 +231,11 @@ class VideoWidget(QWidget):
         self.annotation.del_tube(tube_id)
         self.annotation.save()
 
+    @pyqtSlot(int, str)
+    def change_tube_label(self, tube_id, label):
+        self.annotation.tubes[tube_id].label = label
+        self.annotation.save()
+
     @pyqtSlot(str)
     def update_bbox_label(self, label):
         self.label_frame.update_bbox_label(label)

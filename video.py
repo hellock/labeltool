@@ -152,11 +152,10 @@ class Video(QObject):
         export_num = end - start + 1
         line_thickness = int(min(self.width, self.height) / 200)
         vreader = VideoReader(self.filename)
-        vreader.goto_frame(start - 1)
         vwriter = cv2.VideoWriter(out_file, cv2.VideoWriter_fourcc(*'XVID'),
                                   self.fps, (self.width, self.height))
         while completed < export_num:
-            ret, img = vreader.read()
+            ret, img = vreader.get_frame(start + completed)
             if ret == 0:
                 break
             bboxes = annotation.get_bboxes(completed + start)
